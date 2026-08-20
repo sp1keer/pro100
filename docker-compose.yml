@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pro100_repik
+      POSTGRES_USER: pro100
+      POSTGRES_PASSWORD: pro100_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pro100 -d pro100_repik"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://pro100:pro100_password@db:5432/pro100_repik
+      JWT_SECRET_KEY: change-me-in-production
+      JWT_REFRESH_SECRET_KEY: change-me-refresh-in-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      REFRESH_TOKEN_EXPIRE_DAYS: 14
+      BACKEND_CORS_ORIGINS: http://localhost,http://localhost:5173,http://127.0.0.1:5173,http://localhost:80,http://127.0.0.1
+      FIRST_ADMIN_LOGIN: admin
+      FIRST_ADMIN_PASSWORD: admin12345
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    volumes:
+      - frontend_dist:/app/dist
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - frontend_dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  postgres_data:
+  frontend_dist:
