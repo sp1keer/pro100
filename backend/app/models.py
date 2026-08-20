@@ -9,6 +9,7 @@ from app.db import Base
 
 
 class UserRole(str, enum.Enum):
+    SUPER_ADMIN = "SUPER_ADMIN"
     ADMIN = "ADMIN"
     TUTOR = "TUTOR"
     PARENT = "PARENT"

@@ -1,10 +1,68 @@
-import { CalendarDays, Filter, GraduationCap, LayoutDashboard, LogOut, Pencil, Plus, Search, SlidersHorizontal, Trash2, UserRound, Users } from 'lucide-react';
+import {
+  CalendarDays,
+  Check,
+  Copy,
+  Filter,
+  GraduationCap,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Trash2,
+  UserCheck,
+  UserRound,
+  Users,
+} from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { authApi, clientsApi, lessonsApi, reportsApi, tokenStore, tutorsApi, usersApi } from './api';
 import type { Client, Lesson, LessonsReport, LessonStatus, LessonType, Role, SalaryReportItem, Tutor, User } from './types';
 
-type Page = 'profile' | 'lessons' | 'clients' | 'tutors' | 'admin' | 'reports';
+type Page = 'profile' | 'lessons' | 'clients' | 'tutors' | 'users' | 'admins' | 'reports';
 type ViewMode = 'day' | 'week' | 'month';
+
+function roleLabel(role: Role): string {
+  switch (role) {
+    case 'SUPER_ADMIN':
+      return 'Супер Админ';
+    case 'ADMIN':
+      return 'Администратор';
+    case 'TUTOR':
+      return 'Преподаватель';
+    case 'PARENT':
+      return 'Родитель';
+    default:
+      return role;
+  }
+}
+
+function roleBadgeClass(role: Role): string {
+  switch (role) {
+    case 'SUPER_ADMIN':
+      return 'badge badge-superadmin';
+    case 'ADMIN':
+      return 'badge badge-admin';
+    case 'TUTOR':
+      return 'badge badge-tutor';
+    case 'PARENT':
+      return 'badge badge-parent';
+    default:
+      return 'badge';
+  }
+}
+
+function generateRandomPassword(length = 10): string {
+  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%';
+  let pass = '';
+  for (let i = 0; i < length; i++) {
+    pass += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return pass;
+}
 
 const emptyLesson: Omit<Lesson, 'id'> = {
   type: 'INDIVIDUAL',
@@ -62,14 +120,18 @@ function AppShell() {
   if (loading) return <div className="screen-center">Загрузка...</div>;
   if (!user) return <Login onLogin={setUser} />;
 
+  const isSuperAdmin = user.role === 'SUPER_ADMIN';
+  const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+
   const nav = [
-    { id: 'profile' as const, title: 'Мой профиль', icon: UserRound },
-    { id: 'lessons' as const, title: 'Уроки', icon: CalendarDays },
-    { id: 'clients' as const, title: 'Клиенты', icon: Users },
-    { id: 'tutors' as const, title: 'Педагоги', icon: GraduationCap },
-    { id: 'reports' as const, title: 'Отчёты', icon: LayoutDashboard, adminOnly: true },
-    { id: 'admin' as const, title: 'Админка', icon: SlidersHorizontal, adminOnly: true },
-  ].filter((item) => !item.adminOnly || user.role === 'ADMIN');
+    { id: 'profile' as const, title: 'Мой профиль', icon: UserRound, visible: true },
+    { id: 'lessons' as const, title: 'Уроки', icon: CalendarDays, visible: true },
+    { id: 'clients' as const, title: 'Клиенты', icon: Users, visible: true },
+    { id: 'tutors' as const, title: 'Педагоги', icon: GraduationCap, visible: true },
+    { id: 'reports' as const, title: 'Отчёты', icon: LayoutDashboard, visible: isAdmin },
+    { id: 'users' as const, title: 'Пользователи', icon: SlidersHorizontal, visible: isAdmin },
+    { id: 'admins' as const, title: 'Администраторы', icon: ShieldCheck, visible: isSuperAdmin },
+  ].filter((item) => item.visible);
 
   return (
     <div className="app-shell">
@@ -92,7 +154,7 @@ function AppShell() {
           </label>
           <div className="profile-chip">
             <span>{user.login}</span>
-            <b>{user.role}</b>
+            <span className={roleBadgeClass(user.role)}>{roleLabel(user.role)}</span>
             <button
               title="Выйти"
               onClick={() => {
@@ -110,7 +172,8 @@ function AppShell() {
           {page === 'clients' && <ClientsPage user={user} search={query} />}
           {page === 'tutors' && <TutorsPage user={user} />}
           {page === 'reports' && <ReportsPage />}
-          {page === 'admin' && <AdminPage currentUser={user} />}
+          {page === 'users' && <UsersManagementPage currentUser={user} />}
+          {page === 'admins' && isSuperAdmin && <AdminsManagementPage currentUser={user} />}
         </main>
       </div>
     </div>
@@ -152,10 +215,36 @@ function Profile({ user }: { user: User }) {
   return (
     <section className="panel">
       <h1>Мой профиль</h1>
+      <p>Информация о текущем авторизованном аккаунте.</p>
       <div className="metrics">
         <Metric title="Логин" value={user.login} />
-        <Metric title="Роль" value={user.role} />
-        <Metric title="Создан" value={new Date(user.created_at).toLocaleDateString('ru-RU')} />
+        <Metric title="Роль" value={roleLabel(user.role)} />
+        <Metric title="Дата регистрации" value={new Date(user.created_at).toLocaleDateString('ru-RU')} />
+      </div>
+
+      <div className="sub-panel" style={{ marginTop: '20px' }}>
+        <h3>Права доступа вашей роли ({roleLabel(user.role)})</h3>
+        {user.role === 'SUPER_ADMIN' && (
+          <p>
+            👑 <strong>Супер Администратор:</strong> Полный контроль над системой. Только вы можете создавать и
+            редактировать администраторов, менять им пароли и логины, а также управлять всеми данными системы.
+          </p>
+        )}
+        {user.role === 'ADMIN' && (
+          <p>
+            🛡️ <strong>Администратор:</strong> Управление преподавателями, родителями, учениками, расписанием уроков и отчетами. Выдача и смена логинов и паролей для преподавателей и родителей.
+          </p>
+        )}
+        {user.role === 'TUTOR' && (
+          <p>
+            🎓 <strong>Преподаватель:</strong> Личный кабинет с просмотром ваших занятий, учеников, отметкой проведения уроков и расчетом часов и зарплаты.
+          </p>
+        )}
+        {user.role === 'PARENT' && (
+          <p>
+            👨‍👩‍👦 <strong>Родитель:</strong> Личный кабинет с просмотром расписания ваших детей, статусов проведенных уроков и информации об оплатах.
+          </p>
+        )}
       </div>
     </section>
   );
@@ -168,6 +257,8 @@ function LessonsPage({ user }: { user: User }) {
   const [view, setView] = useState<ViewMode>('week');
   const [activeModal, setActiveModal] = useState<'create' | Lesson | null>(null);
   const [filters, setFilters] = useState({ date_from: '', date_to: '', tutor_id: '', subject: '', type: '', payment_status: '' });
+
+  const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
 
   const load = () => {
     lessonsApi.list(filters).then(setLessons).catch(() => setLessons([]));
@@ -196,7 +287,7 @@ function LessonsPage({ user }: { user: User }) {
           <h1>Календарь занятий</h1>
           <p>Сетка 08:00-20:00, фильтры, статусы и управление уроками.</p>
         </div>
-        {user.role === 'ADMIN' && (
+        {isAdmin && (
           <button className="primary" onClick={() => setActiveModal('create')}>
             <Plus size={18} /> Добавить занятие
           </button>
@@ -235,7 +326,7 @@ function LessonsPage({ user }: { user: User }) {
         clients={clients}
         onUpdate={load}
         editable={user.role !== 'PARENT'}
-        isAdmin={user.role === 'ADMIN'}
+        isAdmin={isAdmin}
         onEdit={(lesson) => setActiveModal(lesson)}
         onDelete={handleDeleteLesson}
       />
@@ -448,9 +539,11 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
   const [tutors, setTutors] = useState<Tutor[]>([]);
   const [activeModal, setActiveModal] = useState<'create' | Client | null>(null);
 
+  const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+
   const load = () => {
     clientsApi.list(search).then(setClients).catch(() => setClients([]));
-    if (user.role === 'ADMIN') {
+    if (isAdmin) {
       usersApi.list().then(setUsers).catch(() => setUsers([]));
       tutorsApi.list().then(setTutors).catch(() => setTutors([]));
     }
@@ -470,16 +563,16 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
     }
   }
 
-  const parentsList = useMemo(() => users.filter((u) => u.role === 'PARENT' || u.role === 'ADMIN'), [users]);
+  const parentsList = useMemo(() => users.filter((u) => u.role === 'PARENT'), [users]);
 
   return (
     <section className="panel">
       <div className="section-head">
         <div>
-          <h1>Клиенты</h1>
-          <p>Управление карточками учеников и клиентов.</p>
+          <h1>Клиенты и ученики</h1>
+          <p>Карточки учеников, привязка к родительским аккаунтам и педагогам.</p>
         </div>
-        {user.role === 'ADMIN' && (
+        {isAdmin && (
           <button className="primary" onClick={() => setActiveModal('create')}>
             <Plus size={18} /> Добавить клиента
           </button>
@@ -491,12 +584,12 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
           <thead>
             <tr>
               <th>ID</th>
-              <th>Имя</th>
+              <th>Имя ученика</th>
               <th>Телефон</th>
               <th>Предмет</th>
-              <th>Родитель</th>
+              <th>Аккаунт родителя (ЛК)</th>
               <th>Педагог</th>
-              {user.role === 'ADMIN' && <th>Действия</th>}
+              {isAdmin && <th>Действия</th>}
             </tr>
           </thead>
           <tbody>
@@ -509,12 +602,21 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
                   <td><strong>{client.name}</strong></td>
                   <td>{client.phone || '—'}</td>
                   <td>{client.subject || '—'}</td>
-                  <td>{parentUser ? parentUser.login : client.parent_id ? `ID ${client.parent_id}` : '—'}</td>
+                  <td>
+                    {parentUser ? (
+                      <span className="account-pill">
+                        <UserCheck size={14} color="var(--accent-strong)" />
+                        <strong>{parentUser.login}</strong>
+                      </span>
+                    ) : (
+                      <span className="account-pill unlinked">Нет аккаунта</span>
+                    )}
+                  </td>
                   <td>{tutorItem ? tutorItem.name : client.tutor_id ? `ID ${client.tutor_id}` : '—'}</td>
-                  {user.role === 'ADMIN' && (
+                  {isAdmin && (
                     <td>
                       <div className="table-actions">
-                        <button className="action-btn" title="Редактировать" onClick={() => setActiveModal(client)}>
+                        <button className="action-btn" title="Редактировать карточку и доступ" onClick={() => setActiveModal(client)}>
                           <Pencil size={14} />
                         </button>
                         <button className="action-btn danger" title="Удалить" onClick={() => handleDelete(client.id)}>
@@ -528,7 +630,7 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
             })}
             {!clients.length && (
               <tr>
-                <td colSpan={user.role === 'ADMIN' ? 7 : 6} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                <td colSpan={isAdmin ? 7 : 6} style={{ textAlign: 'center', color: 'var(--muted)' }}>
                   Клиенты не найдены
                 </td>
               </tr>
@@ -568,17 +670,65 @@ function ClientModal({
       ? { ...initialData }
       : emptyClient
   );
+  
+  // Quick account creation mode
+  const [createAccount, setCreateAccount] = useState(false);
+  const [newLogin, setNewLogin] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
+
+  // Password reset for existing parent
+  const [resetAccount, setResetAccount] = useState(false);
+  const [changeLogin, setChangeLogin] = useState('');
+  const [changePassword, setChangePassword] = useState('');
+
+  const currentParentUser = useMemo(() => parentsList.find((p) => p.id === form.parent_id), [parentsList, form.parent_id]);
+
+  useEffect(() => {
+    if (currentParentUser) {
+      setChangeLogin(currentParentUser.login);
+    }
+  }, [currentParentUser]);
+
+  function fillGeneratedPassword() {
+    const pass = generateRandomPassword();
+    if (createAccount) setNewPassword(pass);
+    if (resetAccount) setChangePassword(pass);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
     try {
+      let resolvedParentId = form.parent_id ? Number(form.parent_id) : null;
+
+      // If user chose to create a new parent account right now
+      if (createAccount) {
+        if (!newLogin.trim() || !newPassword.trim()) {
+          setError('Заполните логин и пароль для нового аккаунта родителя');
+          return;
+        }
+        const createdUser = await usersApi.create({
+          login: newLogin.trim(),
+          password: newPassword.trim(),
+          role: 'PARENT',
+        });
+        resolvedParentId = createdUser.id;
+      } else if (resetAccount && form.parent_id) {
+        // If user changed login or password for existing parent
+        await usersApi.update(form.parent_id, {
+          login: changeLogin.trim(),
+          role: 'PARENT',
+          password: changePassword.trim() || undefined,
+        });
+      }
+
       const payload = {
         ...form,
-        parent_id: form.parent_id ? Number(form.parent_id) : null,
+        parent_id: resolvedParentId,
         tutor_id: form.tutor_id ? Number(form.tutor_id) : null,
       };
+
       if (initialData) {
         await clientsApi.update(initialData.id, payload);
       } else {
@@ -595,22 +745,14 @@ function ClientModal({
       <form className="modal" onSubmit={submit}>
         <h2>{initialData ? 'Редактировать клиента' : 'Добавить клиента'}</h2>
 
-        <label>Имя клиента *</label>
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ФИО клиента" required />
+        <label>Имя ученика / клиента *</label>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ФИО ученика" required />
 
         <label>Телефон</label>
         <input value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+7 (999) 000-00-00" />
 
         <label>Предмет</label>
         <input value={form.subject || ''} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Например: Математика" />
-
-        <label>Родитель (Аккаунт)</label>
-        <select value={form.parent_id ?? ''} onChange={(e) => setForm({ ...form, parent_id: e.target.value ? Number(e.target.value) : null })}>
-          <option value="">Не выбран</option>
-          {parentsList.map((p) => (
-            <option key={p.id} value={p.id}>{p.login} ({p.role})</option>
-          ))}
-        </select>
 
         <label>Привязанный педагог</label>
         <select value={form.tutor_id ?? ''} onChange={(e) => setForm({ ...form, tutor_id: e.target.value ? Number(e.target.value) : null })}>
@@ -619,6 +761,117 @@ function ClientModal({
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
         </select>
+
+        {/* Section: Parent Account */}
+        <div className="sub-panel">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong>Аккаунт родителя (Доступ в ЛК)</strong>
+            {!createAccount && (
+              <button
+                type="button"
+                className="btn-sm btn-secondary"
+                onClick={() => {
+                  setCreateAccount(true);
+                  if (!newLogin && form.name) {
+                    setNewLogin(form.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '') + '_parent');
+                  }
+                  if (!newPassword) fillGeneratedPassword();
+                }}
+              >
+                <Plus size={14} /> Создать новый аккаунт
+              </button>
+            )}
+          </div>
+
+          {!createAccount ? (
+            <>
+              <label>Выбрать существующий аккаунт родителя:</label>
+              <select
+                value={form.parent_id ?? ''}
+                onChange={(e) => {
+                  setForm({ ...form, parent_id: e.target.value ? Number(e.target.value) : null });
+                  setResetAccount(false);
+                }}
+              >
+                <option value="">Без аккаунта</option>
+                {parentsList.map((p) => (
+                  <option key={p.id} value={p.id}>{p.login} (ID: {p.id})</option>
+                ))}
+              </select>
+
+              {form.parent_id && !resetAccount && (
+                <button
+                  type="button"
+                  className="btn-sm btn-secondary"
+                  style={{ justifySelf: 'start' }}
+                  onClick={() => setResetAccount(true)}
+                >
+                  <KeyRound size={14} /> Сменить логин / пароль родителю
+                </button>
+              )}
+
+              {resetAccount && (
+                <div style={{ display: 'grid', gap: '8px', marginTop: '6px' }}>
+                  <label>Логин родителя</label>
+                  <input value={changeLogin} onChange={(e) => setChangeLogin(e.target.value)} required minLength={3} />
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label>Новый пароль (мин. 8 символов)</label>
+                    <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
+                      <RefreshCw size={12} /> Сгенерировать
+                    </button>
+                  </div>
+                  <input
+                    type="password"
+                    value={changePassword}
+                    onChange={(e) => setChangePassword(e.target.value)}
+                    placeholder="Оставьте пустым, если пароль не меняется"
+                  />
+                  <button
+                    type="button"
+                    className="btn-sm"
+                    style={{ justifySelf: 'start' }}
+                    onClick={() => setResetAccount(false)}
+                  >
+                    Отменить смену данных
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <label>Логин для родителя *</label>
+              <input
+                value={newLogin}
+                onChange={(e) => setNewLogin(e.target.value)}
+                placeholder="Логин (например: ivanov_parent)"
+                required
+                minLength={3}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label>Пароль для родителя *</label>
+                <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
+                  <RefreshCw size={12} /> Сгенерировать
+                </button>
+              </div>
+              <input
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Пароль (мин. 8 символов)"
+                required
+                minLength={8}
+              />
+              <button
+                type="button"
+                className="btn-sm"
+                style={{ justifySelf: 'start' }}
+                onClick={() => setCreateAccount(false)}
+              >
+                Отмена создания аккаунта
+              </button>
+            </div>
+          )}
+        </div>
 
         {error && <p className="error">{error}</p>}
 
@@ -636,9 +889,11 @@ function TutorsPage({ user }: { user: User }) {
   const [users, setUsers] = useState<User[]>([]);
   const [activeModal, setActiveModal] = useState<'create' | Tutor | null>(null);
 
+  const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+
   const load = () => {
     tutorsApi.list().then(setTutors).catch(() => setTutors([]));
-    if (user.role === 'ADMIN') {
+    if (isAdmin) {
       usersApi.list().then(setUsers).catch(() => setUsers([]));
     }
   };
@@ -657,16 +912,16 @@ function TutorsPage({ user }: { user: User }) {
     }
   }
 
-  const tutorUsersList = useMemo(() => users.filter((u) => u.role === 'TUTOR' || u.role === 'ADMIN'), [users]);
+  const tutorUsersList = useMemo(() => users.filter((u) => u.role === 'TUTOR'), [users]);
 
   return (
     <section className="panel">
       <div className="section-head">
         <div>
           <h1>Педагоги</h1>
-          <p>Список преподавателей, их ставки и связанные данные.</p>
+          <p>Список преподавателей, их ставки, привязанные аккаунты и статистика.</p>
         </div>
-        {user.role === 'ADMIN' && (
+        {isAdmin && (
           <button className="primary" onClick={() => setActiveModal('create')}>
             <Plus size={18} /> Добавить педагога
           </button>
@@ -674,15 +929,19 @@ function TutorsPage({ user }: { user: User }) {
       </div>
 
       <div className="tutor-list">
-        {tutors.map((tutor) => (
-          <TutorCard
-            key={tutor.id}
-            tutor={tutor}
-            isAdmin={user.role === 'ADMIN'}
-            onEdit={() => setActiveModal(tutor)}
-            onDelete={() => handleDelete(tutor.id)}
-          />
-        ))}
+        {tutors.map((tutor) => {
+          const linkedUser = users.find((u) => u.id === tutor.user_id);
+          return (
+            <TutorCard
+              key={tutor.id}
+              tutor={tutor}
+              linkedUser={linkedUser}
+              isAdmin={isAdmin}
+              onEdit={() => setActiveModal(tutor)}
+              onDelete={() => handleDelete(tutor.id)}
+            />
+          );
+        })}
         {!tutors.length && <p style={{ color: 'var(--muted)' }}>Список педагогов пуст.</p>}
       </div>
 
@@ -700,11 +959,13 @@ function TutorsPage({ user }: { user: User }) {
 
 function TutorCard({
   tutor,
+  linkedUser,
   isAdmin,
   onEdit,
   onDelete,
 }: {
   tutor: Tutor;
+  linkedUser?: User;
   isAdmin: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -718,10 +979,20 @@ function TutorCard({
   return (
     <article className="data-card">
       <div className="tutor-card-head">
-        <h3>{tutor.name}</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3>{tutor.name}</h3>
+          {linkedUser ? (
+            <span className="account-pill" title="Привязан аккаунт входа">
+              <UserCheck size={14} color="var(--accent-strong)" />
+              ЛК: <strong>{linkedUser.login}</strong>
+            </span>
+          ) : (
+            <span className="account-pill unlinked">Нет аккаунта входа</span>
+          )}
+        </div>
         {isAdmin && (
           <div className="table-actions">
-            <button className="action-btn" title="Редактировать" onClick={onEdit}>
+            <button className="action-btn" title="Редактировать педагога и доступ" onClick={onEdit}>
               <Pencil size={14} />
             </button>
             <button className="action-btn danger" title="Удалить" onClick={onDelete}>
@@ -730,7 +1001,7 @@ function TutorCard({
           </div>
         )}
       </div>
-      <p>{tutor.phone || 'Телефон не указан'} · {tutor.telegram || 'Telegram не указан'}</p>
+      <p>{tutor.phone || 'Телефон не указан'} · Telegram: {tutor.telegram || '—'} · WhatsApp: {tutor.whatsapp || '—'}</p>
       <div className="metrics compact">
         <Metric title="Ставка" value={`${tutor.rate_per_hour} ₽/ч`} />
         <Metric title="Занятий" value={stats?.lessons_count ?? 0} />
@@ -756,16 +1027,64 @@ function TutorModal({
       ? { ...initialData }
       : emptyTutor
   );
+  
+  // Quick account creation mode
+  const [createAccount, setCreateAccount] = useState(false);
+  const [newLogin, setNewLogin] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
+
+  // Password reset for existing tutor
+  const [resetAccount, setResetAccount] = useState(false);
+  const [changeLogin, setChangeLogin] = useState('');
+  const [changePassword, setChangePassword] = useState('');
+
+  const currentTutorUser = useMemo(() => tutorUsersList.find((u) => u.id === form.user_id), [tutorUsersList, form.user_id]);
+
+  useEffect(() => {
+    if (currentTutorUser) {
+      setChangeLogin(currentTutorUser.login);
+    }
+  }, [currentTutorUser]);
+
+  function fillGeneratedPassword() {
+    const pass = generateRandomPassword();
+    if (createAccount) setNewPassword(pass);
+    if (resetAccount) setChangePassword(pass);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
     try {
+      let resolvedUserId = form.user_id ? Number(form.user_id) : null;
+
+      // If user chose to create a new tutor account right now
+      if (createAccount) {
+        if (!newLogin.trim() || !newPassword.trim()) {
+          setError('Заполните логин и пароль для нового аккаунта педагога');
+          return;
+        }
+        const createdUser = await usersApi.create({
+          login: newLogin.trim(),
+          password: newPassword.trim(),
+          role: 'TUTOR',
+        });
+        resolvedUserId = createdUser.id;
+      } else if (resetAccount && form.user_id) {
+        // If user changed login or password for existing tutor
+        await usersApi.update(form.user_id, {
+          login: changeLogin.trim(),
+          role: 'TUTOR',
+          password: changePassword.trim() || undefined,
+        });
+      }
+
       const payload = {
         ...form,
-        user_id: form.user_id ? Number(form.user_id) : null,
+        user_id: resolvedUserId,
       };
+
       if (initialData) {
         await tutorsApi.update(initialData.id, payload);
       } else {
@@ -804,13 +1123,116 @@ function TutorModal({
           required
         />
 
-        <label>Привязать к аккаунту пользователя</label>
-        <select value={form.user_id ?? ''} onChange={(e) => setForm({ ...form, user_id: e.target.value ? Number(e.target.value) : null })}>
-          <option value="">Без привязки к аккаунту</option>
-          {tutorUsersList.map((u) => (
-            <option key={u.id} value={u.id}>{u.login} ({u.role})</option>
-          ))}
-        </select>
+        {/* Section: Tutor Account */}
+        <div className="sub-panel">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong>Личный кабинет педагога (Учётная запись)</strong>
+            {!createAccount && (
+              <button
+                type="button"
+                className="btn-sm btn-secondary"
+                onClick={() => {
+                  setCreateAccount(true);
+                  if (!newLogin && form.name) {
+                    setNewLogin(form.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '') + '_tutor');
+                  }
+                  if (!newPassword) fillGeneratedPassword();
+                }}
+              >
+                <Plus size={14} /> Создать новый аккаунт
+              </button>
+            )}
+          </div>
+
+          {!createAccount ? (
+            <>
+              <label>Привязать к существующему аккаунту:</label>
+              <select
+                value={form.user_id ?? ''}
+                onChange={(e) => {
+                  setForm({ ...form, user_id: e.target.value ? Number(e.target.value) : null });
+                  setResetAccount(false);
+                }}
+              >
+                <option value="">Без привязки к аккаунту</option>
+                {tutorUsersList.map((u) => (
+                  <option key={u.id} value={u.id}>{u.login} (ID: {u.id})</option>
+                ))}
+              </select>
+
+              {form.user_id && !resetAccount && (
+                <button
+                  type="button"
+                  className="btn-sm btn-secondary"
+                  style={{ justifySelf: 'start' }}
+                  onClick={() => setResetAccount(true)}
+                >
+                  <KeyRound size={14} /> Сменить логин / пароль педагогу
+                </button>
+              )}
+
+              {resetAccount && (
+                <div style={{ display: 'grid', gap: '8px', marginTop: '6px' }}>
+                  <label>Логин педагога</label>
+                  <input value={changeLogin} onChange={(e) => setChangeLogin(e.target.value)} required minLength={3} />
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label>Новый пароль (мин. 8 символов)</label>
+                    <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
+                      <RefreshCw size={12} /> Сгенерировать
+                    </button>
+                  </div>
+                  <input
+                    type="password"
+                    value={changePassword}
+                    onChange={(e) => setChangePassword(e.target.value)}
+                    placeholder="Оставьте пустым, если пароль не меняется"
+                  />
+                  <button
+                    type="button"
+                    className="btn-sm"
+                    style={{ justifySelf: 'start' }}
+                    onClick={() => setResetAccount(false)}
+                  >
+                    Отменить смену данных
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <label>Логин для педагога *</label>
+              <input
+                value={newLogin}
+                onChange={(e) => setNewLogin(e.target.value)}
+                placeholder="Логин (например: ivanov_tutor)"
+                required
+                minLength={3}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label>Пароль для педагога *</label>
+                <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
+                  <RefreshCw size={12} /> Сгенерировать
+                </button>
+              </div>
+              <input
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Пароль (мин. 8 символов)"
+                required
+                minLength={8}
+              />
+              <button
+                type="button"
+                className="btn-sm"
+                style={{ justifySelf: 'start' }}
+                onClick={() => setCreateAccount(false)}
+              >
+                Отмена создания аккаунта
+              </button>
+            </div>
+          )}
+        </div>
 
         {error && <p className="error">{error}</p>}
 
@@ -823,11 +1245,18 @@ function TutorModal({
   );
 }
 
-function AdminPage({ currentUser }: { currentUser: User }) {
+// ----------------- USERS MANAGEMENT (TUTORS & PARENTS) -----------------
+function UsersManagementPage({ currentUser }: { currentUser: User }) {
   const [users, setUsers] = useState<User[]>([]);
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'TUTOR' | 'PARENT'>('ALL');
   const [activeModal, setActiveModal] = useState<'create' | User | null>(null);
 
-  const load = () => usersApi.list().then(setUsers).catch(() => setUsers([]));
+  const load = () => {
+    usersApi.list().then((data) => {
+      // Exclude ADMIN and SUPER_ADMIN from this page for clarity (admins are managed on Admins page)
+      setUsers(data.filter((u) => u.role === 'TUTOR' || u.role === 'PARENT'));
+    }).catch(() => setUsers([]));
+  };
 
   useEffect(() => {
     load();
@@ -838,7 +1267,7 @@ function AdminPage({ currentUser }: { currentUser: User }) {
       alert('Нельзя удалить собственного пользователя');
       return;
     }
-    if (!window.confirm(`Удалить пользователя "${user.login}"?`)) return;
+    if (!window.confirm(`Удалить аккаунт "${user.login}" (${roleLabel(user.role)})?`)) return;
     try {
       await usersApi.delete(user.id);
       load();
@@ -847,15 +1276,126 @@ function AdminPage({ currentUser }: { currentUser: User }) {
     }
   }
 
+  const filteredUsers = useMemo(() => {
+    if (roleFilter === 'ALL') return users;
+    return users.filter((u) => u.role === roleFilter);
+  }, [users, roleFilter]);
+
   return (
     <section className="panel">
       <div className="section-head">
         <div>
-          <h1>Админка — Управление пользователями</h1>
-          <p>Создание, редактирование ролей, сброс паролей и удаление аккаунтов.</p>
+          <h1>Управление пользователями</h1>
+          <p>Выдача логинов и паролей преподавателям и родителям, изменение доступов и сброс паролей.</p>
         </div>
         <button className="primary" onClick={() => setActiveModal('create')}>
-          <Plus size={18} /> Создать пользователя
+          <Plus size={18} /> Выдать доступ новому пользователю
+        </button>
+      </div>
+
+      <div className="toolbar">
+        <Segment<'ALL' | 'TUTOR' | 'PARENT'>
+          value={roleFilter}
+          onChange={setRoleFilter}
+          options={[
+            ['ALL', `Все (${users.length})`],
+            ['TUTOR', `Преподаватели (${users.filter((u) => u.role === 'TUTOR').length})`],
+            ['PARENT', `Родители (${users.filter((u) => u.role === 'PARENT').length})`],
+          ]}
+        />
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Логин</th>
+              <th>Роль</th>
+              <th>Дата создания</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredUsers.map((u) => (
+              <tr key={u.id}>
+                <td>{u.id}</td>
+                <td><strong>{u.login}</strong></td>
+                <td><span className={roleBadgeClass(u.role)}>{roleLabel(u.role)}</span></td>
+                <td>{new Date(u.created_at).toLocaleString('ru-RU')}</td>
+                <td>
+                  <div className="table-actions">
+                    <button className="action-btn" title="Сменить логин или пароль" onClick={() => setActiveModal(u)}>
+                      <Pencil size={14} /> Изменить / Сбросить пароль
+                    </button>
+                    <button className="action-btn danger" title="Удалить" onClick={() => handleDelete(u)}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!filteredUsers.length && (
+              <tr>
+                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                  Пользователи не найдены
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {activeModal && (
+        <UserAccountModal
+          initialData={activeModal === 'create' ? null : activeModal}
+          allowedRoles={['TUTOR', 'PARENT']}
+          onClose={() => setActiveModal(null)}
+          onSaved={() => { setActiveModal(null); load(); }}
+        />
+      )}
+    </section>
+  );
+}
+
+// ----------------- ADMINS MANAGEMENT (SUPER ADMIN ONLY) -----------------
+function AdminsManagementPage({ currentUser }: { currentUser: User }) {
+  const [admins, setAdmins] = useState<User[]>([]);
+  const [activeModal, setActiveModal] = useState<'create' | User | null>(null);
+
+  const load = () => {
+    usersApi.list('ADMIN').then(setAdmins).catch(() => setAdmins([]));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function handleDelete(admin: User) {
+    if (admin.id === currentUser.id) {
+      alert('Нельзя удалить собственный аккаунт');
+      return;
+    }
+    if (!window.confirm(`Удалить администратора "${admin.login}"?`)) return;
+    try {
+      await usersApi.delete(admin.id);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Не удалось удалить администратора');
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="section-head">
+        <div>
+          <h1>Администраторы системы</h1>
+          <p>
+            👑 Раздел доступен только <strong>Супер Администратору</strong>. Создание администраторов, выдача и сброс логинов и паролей.
+          </p>
+        </div>
+        <button className="primary" onClick={() => setActiveModal('create')}>
+          <Plus size={18} /> Добавить администратора
         </button>
       </div>
 
@@ -871,19 +1411,19 @@ function AdminPage({ currentUser }: { currentUser: User }) {
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td>{user.id}</td>
-                <td><strong>{user.login}</strong></td>
-                <td><b style={{ color: 'var(--accent-strong)' }}>{user.role}</b></td>
-                <td>{new Date(user.created_at).toLocaleString('ru-RU')}</td>
+            {admins.map((adm) => (
+              <tr key={adm.id}>
+                <td>{adm.id}</td>
+                <td><strong>{adm.login}</strong></td>
+                <td><span className={roleBadgeClass(adm.role)}>{roleLabel(adm.role)}</span></td>
+                <td>{new Date(adm.created_at).toLocaleString('ru-RU')}</td>
                 <td>
                   <div className="table-actions">
-                    <button className="action-btn" title="Редактировать" onClick={() => setActiveModal(user)}>
-                      <Pencil size={14} />
+                    <button className="action-btn" title="Сменить логин или пароль" onClick={() => setActiveModal(adm)}>
+                      <Pencil size={14} /> Сменить логин / пароль
                     </button>
-                    {user.id !== currentUser.id && (
-                      <button className="action-btn danger" title="Удалить" onClick={() => handleDelete(user)}>
+                    {adm.id !== currentUser.id && (
+                      <button className="action-btn danger" title="Удалить администратора" onClick={() => handleDelete(adm)}>
                         <Trash2 size={14} />
                       </button>
                     )}
@@ -891,13 +1431,21 @@ function AdminPage({ currentUser }: { currentUser: User }) {
                 </td>
               </tr>
             ))}
+            {!admins.length && (
+              <tr>
+                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                  Администраторы пока не созданы
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
       {activeModal && (
-        <UserModal
+        <UserAccountModal
           initialData={activeModal === 'create' ? null : activeModal}
+          allowedRoles={['ADMIN']}
           onClose={() => setActiveModal(null)}
           onSaved={() => { setActiveModal(null); load(); }}
         />
@@ -906,19 +1454,37 @@ function AdminPage({ currentUser }: { currentUser: User }) {
   );
 }
 
-function UserModal({
+// ----------------- GENERIC USER ACCOUNT MODAL -----------------
+function UserAccountModal({
   initialData,
+  allowedRoles,
   onClose,
   onSaved,
 }: {
   initialData: User | null;
+  allowedRoles: ('ADMIN' | 'TUTOR' | 'PARENT')[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [login, setLogin] = useState(initialData ? initialData.login : '');
-  const [role, setRole] = useState<Role>(initialData ? initialData.role : 'TUTOR');
+  const [role, setRole] = useState<'ADMIN' | 'TUTOR' | 'PARENT'>(
+    initialData && allowedRoles.includes(initialData.role as 'ADMIN' | 'TUTOR' | 'PARENT')
+      ? (initialData.role as 'ADMIN' | 'TUTOR' | 'PARENT')
+      : allowedRoles[0]
+  );
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  function fillGeneratedPassword() {
+    setPassword(generateRandomPassword());
+  }
+
+  function copyCredentials() {
+    navigator.clipboard.writeText(`Логин: ${login}\nПароль: ${password}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -942,27 +1508,49 @@ function UserModal({
   return (
     <div className="modal-backdrop">
       <form className="modal" onSubmit={submit}>
-        <h2>{initialData ? 'Редактировать пользователя' : 'Создать пользователя'}</h2>
+        <h2>{initialData ? `Редактировать ${roleLabel(initialData.role)}` : `Выдать доступ (${roleLabel(role)})`}</h2>
 
         <label>Логин *</label>
         <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Логин (мин. 3 символа)" required minLength={3} />
 
-        <label>Роль</label>
-        <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-          <option value="ADMIN">ADMIN</option>
-          <option value="TUTOR">TUTOR</option>
-          <option value="PARENT">PARENT</option>
-        </select>
+        {allowedRoles.length > 1 && (
+          <>
+            <label>Роль пользователя</label>
+            <select value={role} onChange={(e) => setRole(e.target.value as 'ADMIN' | 'TUTOR' | 'PARENT')}>
+              {allowedRoles.map((r) => (
+                <option key={r} value={r}>{roleLabel(r)} ({r})</option>
+              ))}
+            </select>
+          </>
+        )}
 
-        <label>{initialData ? 'Новый пароль (оставьте пустым, если не меняете)' : 'Пароль *'}</label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label>{initialData ? 'Новый пароль' : 'Пароль *'}</label>
+          <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
+            <RefreshCw size={12} /> Сгенерировать надёжный пароль
+          </button>
+        </div>
+
         <input
-          type="password"
+          type="text"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder={initialData ? '••••••••' : 'Пароль (мин. 8 символов)'}
+          placeholder={initialData ? 'Оставьте пустым, если пароль не меняется' : 'Пароль (мин. 8 символов)'}
           minLength={initialData && !password ? undefined : 8}
           required={!initialData}
         />
+
+        {password && (
+          <div className="credentials-box">
+            <p><strong>Данные для передачи пользователю:</strong></p>
+            <p>Логин: <strong>{login || '(введите логин)'}</strong></p>
+            <p>Пароль: <strong>{password}</strong></p>
+            <button type="button" className="btn-sm" onClick={copyCredentials} style={{ marginTop: '8px' }}>
+              {copied ? <Check size={14} color="var(--accent-strong)" /> : <Copy size={14} />}
+              {copied ? 'Скопировано в буфер!' : 'Скопировать логин и пароль'}
+            </button>
+          </div>
+        )}
 
         {error && <p className="error">{error}</p>}
 
@@ -986,11 +1574,12 @@ function ReportsPage() {
   return (
     <section className="panel">
       <h1>Финансы и отчёты</h1>
+      <p>Сводная статистика по занятиям и расчёт зарплат педагогов.</p>
       <div className="metrics">
         <Metric title="Всего занятий" value={lessons?.total ?? 0} />
         <Metric title="Проведено" value={lessons?.done ?? 0} />
         <Metric title="Отменено" value={lessons?.cancelled ?? 0} />
-        <Metric title="Trial conversion" value={`${conversionRate}%`} />
+        <Metric title="Конверсия пробных" value={`${conversionRate}%`} />
       </div>
       <Table rows={salary} columns={['tutor_id', 'tutor_name', 'lessons_count', 'minutes', 'hours', 'salary']} />
     </section>
@@ -998,14 +1587,40 @@ function ReportsPage() {
 }
 
 function Table<T extends object>({ rows, columns }: { rows: T[]; columns: string[] }) {
+  const columnNames: Record<string, string> = {
+    tutor_id: 'ID педагога',
+    tutor_name: 'Педагог',
+    lessons_count: 'Проведено уроков',
+    minutes: 'Минут',
+    hours: 'Часов',
+    salary: 'Зарплата (руб.)',
+  };
+
   return (
     <div className="table-wrap">
       <table>
-        <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column}>{columnNames[column] || column}</th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={index}>{columns.map((column) => <td key={column}>{String((row as Record<string, unknown>)[column] ?? '')}</td>)}</tr>
+            <tr key={index}>
+              {columns.map((column) => (
+                <td key={column}>{String((row as Record<string, unknown>)[column] ?? '')}</td>
+              ))}
+            </tr>
           ))}
+          {!rows.length && (
+            <tr>
+              <td colSpan={columns.length} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                Данные не найдены
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

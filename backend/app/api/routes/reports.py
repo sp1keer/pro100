@@ -11,7 +11,7 @@ from app.models import Client, Lesson, LessonStatus, LessonType, Tutor, TutorWor
 from app.schemas import LessonsReport, SalaryReportItem
 
 
-router = APIRouter(dependencies=[Depends(require_roles(UserRole.ADMIN))])
+router = APIRouter(dependencies=[Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN))])
 
 
 @router.get("/salary", response_model=list[SalaryReportItem])

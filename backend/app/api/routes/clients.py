@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 def client_scope(stmt: Select[tuple[Client]], user: User, db: Session) -> Select[tuple[Client]]:
-    if user.role == UserRole.ADMIN:
+    if user.role in (UserRole.SUPER_ADMIN, UserRole.ADMIN):
         return stmt
     if user.role == UserRole.PARENT:
         return stmt.where(Client.parent_id == user.id)
@@ -37,7 +37,7 @@ def list_clients(
 @router.post("", response_model=ClientRead, status_code=status.HTTP_201_CREATED)
 def create_client(
     payload: ClientCreate,
-    _: User = Depends(require_roles(UserRole.ADMIN)),
+    _: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> Client:
     data = payload.model_dump()
@@ -62,7 +62,7 @@ def create_client(
 def update_client(
     client_id: int,
     payload: ClientUpdate,
-    _: User = Depends(require_roles(UserRole.ADMIN)),
+    _: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> Client:
     client = db.get(Client, client_id)
@@ -89,7 +89,7 @@ def update_client(
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_client(
     client_id: int,
-    _: User = Depends(require_roles(UserRole.ADMIN)),
+    _: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> None:
     client = db.get(Client, client_id)

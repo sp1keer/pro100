@@ -8,7 +8,7 @@ from app.models import Client, Payment, UserRole
 from app.schemas import PaymentCreate, PaymentRead
 
 
-router = APIRouter(dependencies=[Depends(require_roles(UserRole.ADMIN))])
+router = APIRouter(dependencies=[Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN))])
 
 
 @router.get("", response_model=list[PaymentRead])

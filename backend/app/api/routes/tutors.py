@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 def tutor_scope(stmt: Select[tuple[Tutor]], user: User) -> Select[tuple[Tutor]]:
-    if user.role in (UserRole.ADMIN, UserRole.PARENT, UserRole.TUTOR):
+    if user.role in (UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.PARENT, UserRole.TUTOR):
         return stmt
     return stmt.where(False)
 
@@ -29,7 +29,7 @@ def list_tutors(user: User = Depends(get_current_user), db: Session = Depends(ge
 @router.post("", response_model=TutorRead, status_code=status.HTTP_201_CREATED)
 def create_tutor(
     payload: TutorCreate,
-    _: User = Depends(require_roles(UserRole.ADMIN)),
+    _: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> Tutor:
     data = payload.model_dump()
@@ -60,7 +60,7 @@ def update_tutor(
     tutor = db.get(Tutor, tutor_id)
     if tutor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Педагог не найден")
-    if user.role != UserRole.ADMIN and not (user.role == UserRole.TUTOR and tutor.user_id == user.id):
+    if user.role not in (UserRole.SUPER_ADMIN, UserRole.ADMIN) and not (user.role == UserRole.TUTOR and tutor.user_id == user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     data = payload.model_dump()
@@ -75,7 +75,7 @@ def update_tutor(
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Этот пользователь уже привязан к другому педагогу")
 
     for key, value in data.items():
-        if key == "user_id" and user.role != UserRole.ADMIN:
+        if key == "user_id" and user.role not in (UserRole.SUPER_ADMIN, UserRole.ADMIN):
             continue
         setattr(tutor, key, value)
     db.commit()
@@ -86,7 +86,7 @@ def update_tutor(
 @router.delete("/{tutor_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tutor(
     tutor_id: int,
-    _: User = Depends(require_roles(UserRole.ADMIN)),
+    _: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> None:
     tutor = db.get(Tutor, tutor_id)
@@ -113,7 +113,7 @@ def tutor_stats(
     tutor = db.get(Tutor, tutor_id)
     if tutor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tutor not found")
-    if user.role != UserRole.ADMIN and tutor.user_id != user.id:
+    if user.role not in (UserRole.SUPER_ADMIN, UserRole.ADMIN) and tutor.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     stmt = select(func.count(Lesson.id), func.coalesce(func.sum(TutorWorkLog.minutes), 0)).join(
         TutorWorkLog, TutorWorkLog.lesson_id == Lesson.id, isouter=True

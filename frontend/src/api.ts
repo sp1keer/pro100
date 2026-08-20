@@ -49,7 +49,7 @@ export const authApi = {
 };
 
 export const usersApi = {
-  list: () => request<User[]>('/users'),
+  list: (role?: string) => request<User[]>(`/users${role ? `?role=${role}` : ''}`),
   create: (payload: { login: string; password: string; role: string }) =>
     request<User>('/users', { method: 'POST', body: JSON.stringify(payload) }),
   update: (id: number, payload: { login: string; role: string; password?: string }) =>

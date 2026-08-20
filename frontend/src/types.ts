@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'TUTOR' | 'PARENT';
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'TUTOR' | 'PARENT';
 export type LessonType = 'GROUP' | 'INDIVIDUAL' | 'TRIAL';
 export type LessonStatus = 'PLANNED' | 'DONE' | 'CANCELLED';
 export type PaymentStatus = 'PAID' | 'UNPAID' | 'PARTIAL';

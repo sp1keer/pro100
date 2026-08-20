@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 def lesson_scope(stmt: Select[tuple[Lesson]], user: User, db: Session) -> Select[tuple[Lesson]]:
-    if user.role == UserRole.ADMIN:
+    if user.role in (UserRole.SUPER_ADMIN, UserRole.ADMIN):
         return stmt
     if user.role == UserRole.PARENT:
         return stmt.join(Client).where(Client.parent_id == user.id)
@@ -66,7 +66,7 @@ def list_lessons(
 @router.post("", response_model=LessonRead, status_code=status.HTTP_201_CREATED)
 def create_lesson(
     payload: LessonCreate,
-    _: User = Depends(require_roles(UserRole.ADMIN)),
+    _: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ) -> Lesson:
     if db.get(Tutor, payload.tutor_id) is None:
