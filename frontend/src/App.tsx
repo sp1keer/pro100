@@ -3,6 +3,7 @@ import {
   Check,
   Copy,
   GraduationCap,
+  HeartHandshake,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -11,7 +12,6 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
   Trash2,
   UserCheck,
   UserRound,
@@ -22,7 +22,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { authApi, clientsApi, lessonsApi, reportsApi, tokenStore, tutorsApi, usersApi } from './api';
 import type { Client, Lesson, LessonsReport, LessonStatus, LessonType, Role, SalaryReportItem, Tutor, User } from './types';
 
-type Page = 'profile' | 'lessons' | 'students' | 'clients' | 'tutors' | 'users' | 'admins' | 'reports';
+type Page = 'profile' | 'lessons' | 'students' | 'clients' | 'tutors' | 'parents' | 'users' | 'admins' | 'reports';
 type ViewMode = 'day' | 'week' | 'month';
 
 function roleLabel(role: Role): string {
@@ -111,10 +111,11 @@ const emptyClient: Omit<Client, 'id'> = {
   subject: 'Математика',
 };
 
-const VALID_PAGES: Page[] = ['profile', 'lessons', 'students', 'clients', 'tutors', 'users', 'admins', 'reports'];
+const VALID_PAGES: Page[] = ['profile', 'lessons', 'students', 'clients', 'tutors', 'parents', 'users', 'admins', 'reports'];
 
 function normalizePage(raw: string): Page {
   if (raw === 'clients') return 'students';
+  if (raw === 'users') return 'parents';
   if (VALID_PAGES.includes(raw as Page)) return raw as Page;
   return 'lessons';
 }
@@ -177,7 +178,7 @@ function AppShell() {
     if (!user) return;
     if (page === 'admins' && !isSuperAdmin) {
       setPage('lessons');
-    } else if ((page === 'reports' || page === 'users') && !isAdmin) {
+    } else if ((page === 'reports' || page === 'parents' || page === 'users') && !isAdmin) {
       setPage('lessons');
     }
   }, [user, page, isSuperAdmin, isAdmin]);
@@ -190,8 +191,8 @@ function AppShell() {
     { id: 'lessons' as const, title: 'Уроки', icon: CalendarDays, visible: true },
     { id: 'students' as const, title: 'Ученики', icon: Users, visible: true },
     { id: 'tutors' as const, title: 'Педагоги', icon: GraduationCap, visible: true },
+    { id: 'parents' as const, title: 'Родители', icon: HeartHandshake, visible: isAdmin },
     { id: 'reports' as const, title: 'Отчёты', icon: LayoutDashboard, visible: isAdmin },
-    { id: 'users' as const, title: 'Пользователи', icon: SlidersHorizontal, visible: isAdmin },
     { id: 'admins' as const, title: 'Администраторы', icon: ShieldCheck, visible: isSuperAdmin },
   ].filter((item) => item.visible);
 
@@ -203,7 +204,7 @@ function AppShell() {
           {nav.map((item) => (
             <button
               key={item.id}
-              className={page === item.id || (item.id === 'students' && page === 'clients') ? 'active' : ''}
+              className={page === item.id || (item.id === 'students' && page === 'clients') || (item.id === 'parents' && page === 'users') ? 'active' : ''}
               onClick={() => setPage(item.id)}
             >
               <item.icon size={18} />
@@ -243,8 +244,8 @@ function AppShell() {
           {page === 'lessons' && <LessonsPage user={user} />}
           {(page === 'students' || page === 'clients') && <StudentsPage user={user} search={query} />}
           {page === 'tutors' && <TutorsPage user={user} />}
+          {(page === 'parents' || page === 'users') && <ParentsManagementPage currentUser={user} />}
           {page === 'reports' && <ReportsPage />}
-          {page === 'users' && <UsersManagementPage currentUser={user} />}
           {page === 'admins' && isSuperAdmin && <AdminsManagementPage currentUser={user} />}
         </main>
       </div>
@@ -357,7 +358,6 @@ function LessonsPage({ user }: { user: User }) {
     clientsApi.list().then(setClients).catch(() => setClients([]));
   };
 
-  // Automatically filter whenever any filter changes
   useEffect(() => {
     load();
   }, [filters]);
@@ -586,7 +586,6 @@ function LessonModal({
   );
   const [error, setError] = useState('');
 
-  // Lock background scroll when modal is open
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -753,7 +752,7 @@ function StudentsPage({ user, search }: { user: User; search: string }) {
   const load = () => {
     clientsApi.list(search).then(setClients).catch(() => setClients([]));
     if (isAdmin) {
-      usersApi.list().then(setUsers).catch(() => setUsers([]));
+      usersApi.list('PARENT').then(setUsers).catch(() => setUsers([]));
       tutorsApi.list().then(setTutors).catch(() => setTutors([]));
     }
   };
@@ -771,8 +770,6 @@ function StudentsPage({ user, search }: { user: User; search: string }) {
       alert(err instanceof Error ? err.message : 'Не удалось удалить ученика');
     }
   }
-
-  const parentsList = useMemo(() => users.filter((u) => u.role === 'PARENT'), [users]);
 
   return (
     <section className="panel">
@@ -851,7 +848,7 @@ function StudentsPage({ user, search }: { user: User; search: string }) {
       {activeModal && (
         <StudentModal
           initialData={activeModal === 'create' ? null : activeModal}
-          parentsList={parentsList}
+          parentsList={users}
           tutorsList={tutors}
           onClose={() => setActiveModal(null)}
           onSaved={() => { setActiveModal(null); load(); }}
@@ -893,7 +890,6 @@ function StudentModal({
   const [changeLogin, setChangeLogin] = useState('');
   const [changePassword, setChangePassword] = useState('');
 
-  // Lock background scroll when modal is open
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -928,7 +924,6 @@ function StudentModal({
     try {
       let resolvedParentId = form.parent_id ? Number(form.parent_id) : null;
 
-      // If user chose to create a new parent account right now
       if (createAccount) {
         if (!newLogin.trim() || !newPassword.trim()) {
           setError('Заполните логин и пароль для нового аккаунта родителя');
@@ -941,7 +936,6 @@ function StudentModal({
         });
         resolvedParentId = createdUser.id;
       } else if (resetAccount && form.parent_id) {
-        // If user changed login or password for existing parent
         await usersApi.update(form.parent_id, {
           login: changeLogin.trim(),
           role: 'PARENT',
@@ -1200,7 +1194,7 @@ function TutorsPage({ user }: { user: User }) {
   const load = () => {
     tutorsApi.list().then(setTutors).catch(() => setTutors([]));
     if (isAdmin) {
-      usersApi.list().then(setUsers).catch(() => setUsers([]));
+      usersApi.list('TUTOR').then(setUsers).catch(() => setUsers([]));
     }
   };
 
@@ -1217,8 +1211,6 @@ function TutorsPage({ user }: { user: User }) {
       alert(err instanceof Error ? err.message : 'Не удалось удалить педагога');
     }
   }
-
-  const tutorUsersList = useMemo(() => users.filter((u) => u.role === 'TUTOR'), [users]);
 
   return (
     <section className="panel">
@@ -1254,7 +1246,7 @@ function TutorsPage({ user }: { user: User }) {
       {activeModal && (
         <TutorModal
           initialData={activeModal === 'create' ? null : activeModal}
-          tutorUsersList={tutorUsersList}
+          tutorUsersList={users}
           onClose={() => setActiveModal(null)}
           onSaved={() => { setActiveModal(null); load(); }}
         />
@@ -1346,7 +1338,6 @@ function TutorModal({
   const [changeLogin, setChangeLogin] = useState('');
   const [changePassword, setChangePassword] = useState('');
 
-  // Lock background scroll when modal is open
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -1381,7 +1372,6 @@ function TutorModal({
     try {
       let resolvedUserId = form.user_id ? Number(form.user_id) : null;
 
-      // If user chose to create a new tutor account right now
       if (createAccount) {
         if (!newLogin.trim() || !newPassword.trim()) {
           setError('Заполните логин и пароль для нового аккаунта педагога');
@@ -1394,7 +1384,6 @@ function TutorModal({
         });
         resolvedUserId = createdUser.id;
       } else if (resetAccount && form.user_id) {
-        // If user changed login or password for existing tutor
         await usersApi.update(form.user_id, {
           login: changeLogin.trim(),
           role: 'TUTOR',
@@ -1637,63 +1626,45 @@ function TutorModal({
   );
 }
 
-// ----------------- USERS MANAGEMENT (TUTORS & PARENTS) -----------------
-function UsersManagementPage({ currentUser }: { currentUser: User }) {
-  const [users, setUsers] = useState<User[]>([]);
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'TUTOR' | 'PARENT'>('ALL');
+// ----------------- PARENTS MANAGEMENT (РОДИТЕЛИ) -----------------
+function ParentsManagementPage({ currentUser }: { currentUser: User }) {
+  const [parents, setParents] = useState<User[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [activeModal, setActiveModal] = useState<'create' | User | null>(null);
 
   const load = () => {
-    usersApi.list().then((data) => {
-      setUsers(data.filter((u) => u.role === 'TUTOR' || u.role === 'PARENT'));
-    }).catch(() => setUsers([]));
+    usersApi.list('PARENT').then(setParents).catch(() => setParents([]));
+    clientsApi.list().then(setClients).catch(() => setClients([]));
   };
 
   useEffect(() => {
     load();
   }, []);
 
-  async function handleDelete(user: User) {
-    if (user.id === currentUser.id) {
+  async function handleDelete(parent: User) {
+    if (parent.id === currentUser.id) {
       alert('Нельзя удалить собственного пользователя');
       return;
     }
-    if (!window.confirm(`Удалить аккаунт "${user.login}" (${roleLabel(user.role)})?`)) return;
+    if (!window.confirm(`Удалить аккаунт родителя "${parent.login}"?`)) return;
     try {
-      await usersApi.delete(user.id);
+      await usersApi.delete(parent.id);
       load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Не удалось удалить пользователя');
+      alert(err instanceof Error ? err.message : 'Не удалось удалить родителя');
     }
   }
-
-  const filteredUsers = useMemo(() => {
-    if (roleFilter === 'ALL') return users;
-    return users.filter((u) => u.role === roleFilter);
-  }, [users, roleFilter]);
 
   return (
     <section className="panel">
       <div className="section-head">
         <div>
-          <h1>Управление пользователями</h1>
-          <p>Выдача логинов и паролей преподавателям и родителям, изменение доступов и сброс паролей.</p>
+          <h1>Родители</h1>
+          <p>Создание и редактирование учетных записей родителей, смена доступов и сброс паролей.</p>
         </div>
         <button className="primary" onClick={() => setActiveModal('create')}>
-          <Plus size={18} /> Выдать доступ новому пользователю
+          <Plus size={18} /> Добавить родителя
         </button>
-      </div>
-
-      <div className="toolbar">
-        <Segment<'ALL' | 'TUTOR' | 'PARENT'>
-          value={roleFilter}
-          onChange={setRoleFilter}
-          options={[
-            ['ALL', `Все (${users.length})`],
-            ['TUTOR', `Преподаватели (${users.filter((u) => u.role === 'TUTOR').length})`],
-            ['PARENT', `Родители (${users.filter((u) => u.role === 'PARENT').length})`],
-          ]}
-        />
       </div>
 
       <div className="table-wrap">
@@ -1701,35 +1672,49 @@ function UsersManagementPage({ currentUser }: { currentUser: User }) {
           <thead>
             <tr>
               <th>ID</th>
-              <th>Логин</th>
-              <th>Роль</th>
-              <th>Дата создания</th>
+              <th>Логин (ЛК)</th>
+              <th>Привязанные ученики (дети)</th>
+              <th>Дата регистрации</th>
               <th>Действия</th>
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.map((u) => (
-              <tr key={u.id}>
-                <td>{u.id}</td>
-                <td><strong>{u.login}</strong></td>
-                <td><span className={roleBadgeClass(u.role)}>{roleLabel(u.role)}</span></td>
-                <td>{new Date(u.created_at).toLocaleString('ru-RU')}</td>
-                <td>
-                  <div className="table-actions">
-                    <button className="action-btn" title="Сменить логин или пароль" onClick={() => setActiveModal(u)}>
-                      <Pencil size={14} /> Изменить / Сбросить пароль
-                    </button>
-                    <button className="action-btn danger" title="Удалить" onClick={() => handleDelete(u)}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {!filteredUsers.length && (
+            {parents.map((p) => {
+              const children = clients.filter((c) => c.parent_id === p.id);
+              return (
+                <tr key={p.id}>
+                  <td>{p.id}</td>
+                  <td>
+                    <span className="account-pill">
+                      <UserCheck size={14} color="var(--accent-strong)" />
+                      <strong>{p.login}</strong>
+                    </span>
+                  </td>
+                  <td>
+                    {children.length > 0 ? (
+                      children.map((c) => c.name).join(', ')
+                    ) : (
+                      <span style={{ color: 'var(--muted)' }}>Нет привязанных учеников</span>
+                    )}
+                  </td>
+                  <td>{new Date(p.created_at).toLocaleString('ru-RU')}</td>
+                  <td>
+                    <div className="table-actions">
+                      <button className="action-btn" title="Сменить логин или пароль" onClick={() => setActiveModal(p)}>
+                        <Pencil size={14} /> Сменить логин / пароль
+                      </button>
+                      <button className="action-btn danger" title="Удалить" onClick={() => handleDelete(p)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {!parents.length && (
               <tr>
                 <td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)' }}>
-                  Пользователи не найдены
+                  Родители пока не добавлены
                 </td>
               </tr>
             )}
@@ -1738,14 +1723,126 @@ function UsersManagementPage({ currentUser }: { currentUser: User }) {
       </div>
 
       {activeModal && (
-        <UserAccountModal
+        <ParentAccountModal
           initialData={activeModal === 'create' ? null : activeModal}
-          allowedRoles={['TUTOR', 'PARENT']}
           onClose={() => setActiveModal(null)}
           onSaved={() => { setActiveModal(null); load(); }}
         />
       )}
     </section>
+  );
+}
+
+function ParentAccountModal({
+  initialData,
+  onClose,
+  onSaved,
+}: {
+  initialData: User | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [login, setLogin] = useState(initialData ? initialData.login : '');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  function fillGeneratedPassword() {
+    setPassword(generateRandomPassword());
+  }
+
+  function copyCredentials() {
+    navigator.clipboard.writeText(`Логин: ${login}\nПароль: ${password}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    try {
+      if (initialData) {
+        await usersApi.update(initialData.id, { login, role: 'PARENT', password: password || undefined });
+      } else {
+        if (!password || password.length < 8) {
+          setError('Пароль должен содержать минимум 8 символов');
+          return;
+        }
+        await usersApi.create({ login, role: 'PARENT', password });
+      }
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сохранить');
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <form className="modal" onSubmit={submit}>
+        <div className="modal-header">
+          <h2>{initialData ? 'Редактировать родителя' : 'Добавить родителя'}</h2>
+          <button type="button" className="close-btn" title="Закрыть" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <label htmlFor="parent_account_login">Логин *</label>
+        <input
+          id="parent_account_login"
+          name="login"
+          value={login}
+          onChange={(e) => setLogin(e.target.value)}
+          placeholder="Логин (например: ivanov_parent)"
+          required
+          minLength={3}
+        />
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label htmlFor="parent_account_password">{initialData ? 'Новый пароль' : 'Пароль *'}</label>
+          <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
+            <RefreshCw size={12} /> Сгенерировать надёжный пароль
+          </button>
+        </div>
+
+        <input
+          id="parent_account_password"
+          name="password"
+          type="text"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder={initialData ? 'Оставьте пустым, если пароль не меняется' : 'Пароль (мин. 8 символов)'}
+          minLength={initialData && !password ? undefined : 8}
+          required={!initialData}
+        />
+
+        {password && (
+          <div className="credentials-box">
+            <p><strong>Данные для передачи родителю:</strong></p>
+            <p>Логин: <strong>{login || '(введите логин)'}</strong></p>
+            <p>Пароль: <strong>{password}</strong></p>
+            <button type="button" className="btn-sm" onClick={copyCredentials} style={{ marginTop: '8px' }}>
+              {copied ? <Check size={14} color="var(--accent-strong)" /> : <Copy size={14} />}
+              {copied ? 'Скопировано в буфер!' : 'Скопировать логин и пароль'}
+            </button>
+          </div>
+        )}
+
+        {error && <p className="error">{error}</p>}
+
+        <div className="modal-actions">
+          <button type="button" onClick={onClose}>Отмена</button>
+          <button className="primary">Сохранить</button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -1834,9 +1931,8 @@ function AdminsManagementPage({ currentUser }: { currentUser: User }) {
       </div>
 
       {activeModal && (
-        <UserAccountModal
+        <AdminAccountModal
           initialData={activeModal === 'create' ? null : activeModal}
-          allowedRoles={['ADMIN']}
           onClose={() => setActiveModal(null)}
           onSaved={() => { setActiveModal(null); load(); }}
         />
@@ -1845,29 +1941,20 @@ function AdminsManagementPage({ currentUser }: { currentUser: User }) {
   );
 }
 
-// ----------------- GENERIC USER ACCOUNT MODAL -----------------
-function UserAccountModal({
+function AdminAccountModal({
   initialData,
-  allowedRoles,
   onClose,
   onSaved,
 }: {
   initialData: User | null;
-  allowedRoles: ('ADMIN' | 'TUTOR' | 'PARENT')[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [login, setLogin] = useState(initialData ? initialData.login : '');
-  const [role, setRole] = useState<'ADMIN' | 'TUTOR' | 'PARENT'>(
-    initialData && allowedRoles.includes(initialData.role as 'ADMIN' | 'TUTOR' | 'PARENT')
-      ? (initialData.role as 'ADMIN' | 'TUTOR' | 'PARENT')
-      : allowedRoles[0]
-  );
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Lock background scroll when modal is open
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -1891,13 +1978,13 @@ function UserAccountModal({
     setError('');
     try {
       if (initialData) {
-        await usersApi.update(initialData.id, { login, role, password: password || undefined });
+        await usersApi.update(initialData.id, { login, role: 'ADMIN', password: password || undefined });
       } else {
         if (!password || password.length < 8) {
           setError('Пароль должен содержать минимум 8 символов');
           return;
         }
-        await usersApi.create({ login, role, password });
+        await usersApi.create({ login, role: 'ADMIN', password });
       }
       onSaved();
     } catch (err) {
@@ -1909,48 +1996,32 @@ function UserAccountModal({
     <div className="modal-backdrop">
       <form className="modal" onSubmit={submit}>
         <div className="modal-header">
-          <h2>{initialData ? `Редактировать ${roleLabel(initialData.role)}` : `Выдать доступ (${roleLabel(role)})`}</h2>
+          <h2>{initialData ? 'Редактировать администратора' : 'Добавить администратора'}</h2>
           <button type="button" className="close-btn" title="Закрыть" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
 
-        <label htmlFor="user_modal_login">Логин *</label>
+        <label htmlFor="admin_account_login">Логин *</label>
         <input
-          id="user_modal_login"
+          id="admin_account_login"
           name="login"
           value={login}
           onChange={(e) => setLogin(e.target.value)}
-          placeholder="Логин (мин. 3 символа)"
+          placeholder="Логин администратора (мин. 3 символа)"
           required
           minLength={3}
         />
 
-        {allowedRoles.length > 1 && (
-          <>
-            <label htmlFor="user_modal_role">Роль пользователя</label>
-            <select
-              id="user_modal_role"
-              name="role"
-              value={role}
-              onChange={(e) => setRole(e.target.value as 'ADMIN' | 'TUTOR' | 'PARENT')}
-            >
-              {allowedRoles.map((r) => (
-                <option key={r} value={r}>{roleLabel(r)} ({r})</option>
-              ))}
-            </select>
-          </>
-        )}
-
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <label htmlFor="user_modal_password">{initialData ? 'Новый пароль' : 'Пароль *'}</label>
+          <label htmlFor="admin_account_password">{initialData ? 'Новый пароль' : 'Пароль *'}</label>
           <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
             <RefreshCw size={12} /> Сгенерировать надёжный пароль
           </button>
         </div>
 
         <input
-          id="user_modal_password"
+          id="admin_account_password"
           name="password"
           type="text"
           value={password}
@@ -1962,7 +2033,7 @@ function UserAccountModal({
 
         {password && (
           <div className="credentials-box">
-            <p><strong>Данные для передачи пользователю:</strong></p>
+            <p><strong>Данные для передачи администратору:</strong></p>
             <p>Логин: <strong>{login || '(введите логин)'}</strong></p>
             <p>Пароль: <strong>{password}</strong></p>
             <button type="button" className="btn-sm" onClick={copyCredentials} style={{ marginTop: '8px' }}>
