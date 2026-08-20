@@ -220,24 +220,48 @@ p {
 
 .toolbar,
 .inline-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   margin-bottom: 18px;
 }
 
+.toolbar > input,
+.toolbar > select {
+  width: auto;
+  min-width: 140px;
+  flex: 1 1 140px;
+}
+
+.toolbar > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .segment {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: inline-flex;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
+  flex: 0 0 auto;
+  min-height: 38px;
 }
 
 .segment button {
   border: 0;
   border-radius: 0;
+  padding: 0 14px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 38px;
+  border-right: 1px solid var(--line);
+}
+
+.segment button:last-child {
+  border-right: 0;
 }
 
 .segment button.active {

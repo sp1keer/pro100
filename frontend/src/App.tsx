@@ -96,11 +96,43 @@ const emptyClient: Omit<Client, 'id'> = {
   subject: '',
 };
 
+const VALID_PAGES: Page[] = ['profile', 'lessons', 'clients', 'tutors', 'users', 'admins', 'reports'];
+
+function getInitialPage(): Page {
+  const hash = window.location.hash.replace('#', '') as Page;
+  if (VALID_PAGES.includes(hash)) {
+    return hash;
+  }
+  const saved = localStorage.getItem('pro100_active_page') as Page;
+  if (VALID_PAGES.includes(saved)) {
+    return saved;
+  }
+  return 'lessons';
+}
+
 function AppShell() {
   const [user, setUser] = useState<User | null>(null);
-  const [page, setPage] = useState<Page>('lessons');
+  const [page, setPageState] = useState<Page>(getInitialPage);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const setPage = (newPage: Page) => {
+    setPageState(newPage);
+    window.location.hash = newPage;
+    localStorage.setItem('pro100_active_page', newPage);
+  };
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '') as Page;
+      if (VALID_PAGES.includes(hash)) {
+        setPageState(hash);
+        localStorage.setItem('pro100_active_page', hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   useEffect(() => {
     if (!tokenStore.refresh) {
@@ -117,11 +149,20 @@ function AppShell() {
       .finally(() => setLoading(false));
   }, []);
 
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+
+  useEffect(() => {
+    if (!user) return;
+    if (page === 'admins' && !isSuperAdmin) {
+      setPage('lessons');
+    } else if ((page === 'reports' || page === 'users') && !isAdmin) {
+      setPage('lessons');
+    }
+  }, [user, page, isSuperAdmin, isAdmin]);
+
   if (loading) return <div className="screen-center">Загрузка...</div>;
   if (!user) return <Login onLogin={setUser} />;
-
-  const isSuperAdmin = user.role === 'SUPER_ADMIN';
-  const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
 
   const nav = [
     { id: 'profile' as const, title: 'Мой профиль', icon: UserRound, visible: true },
