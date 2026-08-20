@@ -50,9 +50,9 @@ export const authApi = {
 
 export const usersApi = {
   list: (role?: string) => request<User[]>(`/users${role ? `?role=${role}` : ''}`),
-  create: (payload: { login: string; password: string; role: string }) =>
+  create: (payload: { login: string; password: string; role: string; full_name?: string | null; phone?: string | null; telegram?: string | null; whatsapp?: string | null }) =>
     request<User>('/users', { method: 'POST', body: JSON.stringify(payload) }),
-  update: (id: number, payload: { login: string; role: string; password?: string }) =>
+  update: (id: number, payload: { login: string; role: string; password?: string; full_name?: string | null; phone?: string | null; telegram?: string | null; whatsapp?: string | null }) =>
     request<User>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   delete: (id: number) => request<void>(`/users/${id}`, { method: 'DELETE' }),
 };

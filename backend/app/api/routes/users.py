@@ -57,7 +57,15 @@ def create_user(
     if db.scalar(select(User).where(User.login == payload.login)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пользователь с таким логином уже существует")
 
-    user = User(login=payload.login, role=payload.role, password_hash=get_password_hash(payload.password))
+    user = User(
+        login=payload.login,
+        role=payload.role,
+        password_hash=get_password_hash(payload.password),
+        full_name=payload.full_name,
+        phone=payload.phone,
+        telegram=payload.telegram,
+        whatsapp=payload.whatsapp,
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -101,6 +109,11 @@ def update_user(
 
     user.login = payload.login
     user.role = payload.role
+    user.full_name = payload.full_name
+    user.phone = payload.phone
+    user.telegram = payload.telegram
+    user.whatsapp = payload.whatsapp
+
     if payload.password and payload.password.strip():
         user.password_hash = get_password_hash(payload.password)
     db.commit()

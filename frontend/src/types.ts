@@ -7,6 +7,10 @@ export type User = {
   id: number;
   login: string;
   role: Role;
+  full_name: string | null;
+  phone: string | null;
+  telegram: string | null;
+  whatsapp: string | null;
   created_at: string;
 };
 
@@ -27,6 +31,8 @@ export type Client = {
   parent_id: number | null;
   tutor_id: number | null;
   phone: string | null;
+  telegram: string | null;
+  whatsapp: string | null;
   subject: string | null;
 };
 

@@ -9,6 +9,10 @@ from app.models import LessonStatus, LessonType, PaymentStatus, UserRole
 class UserBase(BaseModel):
     login: str = Field(min_length=3, max_length=64)
     role: UserRole
+    full_name: str | None = None
+    phone: str | None = None
+    telegram: str | None = None
+    whatsapp: str | None = None
 
 
 class UserCreate(UserBase):
@@ -19,6 +23,10 @@ class UserUpdate(BaseModel):
     login: str = Field(min_length=3, max_length=64)
     role: UserRole
     password: str | None = Field(default=None, min_length=8, max_length=128)
+    full_name: str | None = None
+    phone: str | None = None
+    telegram: str | None = None
+    whatsapp: str | None = None
 
 
 class UserRead(UserBase):
@@ -74,6 +82,8 @@ class ClientBase(BaseModel):
     parent_id: int | None = None
     tutor_id: int | None = None
     phone: str | None = None
+    telegram: str | None = None
+    whatsapp: str | None = None
     subject: str | None = None
 
 

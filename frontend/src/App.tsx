@@ -79,6 +79,17 @@ function renderTextWithLinks(text: string) {
   });
 }
 
+function ContactBadges({ phone, telegram, whatsapp }: { phone?: string | null; telegram?: string | null; whatsapp?: string | null }) {
+  if (!phone && !telegram && !whatsapp) return <span style={{ color: 'var(--muted)' }}>—</span>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '13px' }}>
+      {phone && <span>📞 {phone}</span>}
+      {telegram && <span>✈️ {telegram.startsWith('@') ? telegram : `@${telegram}`}</span>}
+      {whatsapp && <span>💬 WA: {whatsapp}</span>}
+    </div>
+  );
+}
+
 const emptyLesson: Omit<Lesson, 'id'> = {
   type: 'INDIVIDUAL',
   date: new Date().toISOString().slice(0, 10),
@@ -108,6 +119,8 @@ const emptyClient: Omit<Client, 'id'> = {
   parent_id: null,
   tutor_id: null,
   phone: '',
+  telegram: '',
+  whatsapp: '',
   subject: 'Математика',
 };
 
@@ -226,7 +239,7 @@ function AppShell() {
             />
           </label>
           <div className="profile-chip">
-            <span>{user.login}</span>
+            <span>{user.full_name ? `${user.full_name} (${user.login})` : user.login}</span>
             <span className={roleBadgeClass(user.role)}>{roleLabel(user.role)}</span>
             <button
               title="Выйти"
@@ -309,6 +322,7 @@ function Profile({ user }: { user: User }) {
       <h1>Мой профиль</h1>
       <p>Информация о текущем авторизованном аккаунте.</p>
       <div className="metrics">
+        <Metric title="ФИО" value={user.full_name || 'Не указано'} />
         <Metric title="Логин" value={user.login} />
         <Metric title="Роль" value={roleLabel(user.role)} />
         <Metric title="Дата регистрации" value={new Date(user.created_at).toLocaleDateString('ru-RU')} />
@@ -743,7 +757,7 @@ function LessonModal({
 
 function StudentsPage({ user, search }: { user: User; search: string }) {
   const [clients, setClients] = useState<Client[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [parents, setParents] = useState<User[]>([]);
   const [tutors, setTutors] = useState<Tutor[]>([]);
   const [activeModal, setActiveModal] = useState<'create' | Client | null>(null);
 
@@ -752,7 +766,7 @@ function StudentsPage({ user, search }: { user: User; search: string }) {
   const load = () => {
     clientsApi.list(search).then(setClients).catch(() => setClients([]));
     if (isAdmin) {
-      usersApi.list('PARENT').then(setUsers).catch(() => setUsers([]));
+      usersApi.list('PARENT').then(setParents).catch(() => setParents([]));
       tutorsApi.list().then(setTutors).catch(() => setTutors([]));
     }
   };
@@ -776,7 +790,7 @@ function StudentsPage({ user, search }: { user: User; search: string }) {
       <div className="section-head">
         <div>
           <h1>Ученики</h1>
-          <p>Карточки учеников, привязка к родительским аккаунтам и педагогам.</p>
+          <p>Карточки учеников, контакты, привязка к родительским аккаунтам и педагогам.</p>
         </div>
         {isAdmin && (
           <button className="primary" onClick={() => setActiveModal('create')}>
@@ -790,8 +804,8 @@ function StudentsPage({ user, search }: { user: User; search: string }) {
           <thead>
             <tr>
               <th>ID</th>
-              <th>Имя ученика</th>
-              <th>Телефон</th>
+              <th>ФИО ученика</th>
+              <th>Контакты ученика</th>
               <th>Предмет</th>
               <th>Аккаунт родителя (ЛК)</th>
               <th>Педагог</th>
@@ -800,19 +814,24 @@ function StudentsPage({ user, search }: { user: User; search: string }) {
           </thead>
           <tbody>
             {clients.map((client) => {
-              const parentUser = users.find((u) => u.id === client.parent_id);
+              const parentUser = parents.find((u) => u.id === client.parent_id);
               const tutorItem = tutors.find((t) => t.id === client.tutor_id);
               return (
                 <tr key={client.id}>
                   <td>{client.id}</td>
                   <td><strong>{client.name}</strong></td>
-                  <td>{client.phone || '—'}</td>
+                  <td>
+                    <ContactBadges phone={client.phone} telegram={client.telegram} whatsapp={client.whatsapp} />
+                  </td>
                   <td>{client.subject || '—'}</td>
                   <td>
                     {parentUser ? (
                       <span className="account-pill">
                         <UserCheck size={14} color="var(--accent-strong)" />
-                        <strong>{parentUser.login}</strong>
+                        <div>
+                          {parentUser.full_name && <div style={{ fontWeight: 600 }}>{parentUser.full_name}</div>}
+                          <small style={{ color: 'var(--muted)' }}>Логин: {parentUser.login}</small>
+                        </div>
                       </span>
                     ) : (
                       <span className="account-pill unlinked">Нет аккаунта</span>
@@ -848,7 +867,7 @@ function StudentsPage({ user, search }: { user: User; search: string }) {
       {activeModal && (
         <StudentModal
           initialData={activeModal === 'create' ? null : activeModal}
-          parentsList={users}
+          parentsList={parents}
           tutorsList={tutors}
           onClose={() => setActiveModal(null)}
           onSaved={() => { setActiveModal(null); load(); }}
@@ -880,6 +899,9 @@ function StudentModal({
   // Quick parent account creation mode
   const [createAccount, setCreateAccount] = useState(false);
   const [parentFullName, setParentFullName] = useState('');
+  const [parentPhone, setParentPhone] = useState('');
+  const [parentTelegram, setParentTelegram] = useState('');
+  const [parentWhatsapp, setParentWhatsapp] = useState('');
   const [newLogin, setNewLogin] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [copiedParentCreds, setCopiedParentCreds] = useState(false);
@@ -887,6 +909,10 @@ function StudentModal({
 
   // Password reset for existing parent
   const [resetAccount, setResetAccount] = useState(false);
+  const [changeFullName, setChangeFullName] = useState('');
+  const [changePhone, setChangePhone] = useState('');
+  const [changeTelegram, setChangeTelegram] = useState('');
+  const [changeWhatsapp, setChangeWhatsapp] = useState('');
   const [changeLogin, setChangeLogin] = useState('');
   const [changePassword, setChangePassword] = useState('');
 
@@ -903,6 +929,10 @@ function StudentModal({
   useEffect(() => {
     if (currentParentUser) {
       setChangeLogin(currentParentUser.login);
+      setChangeFullName(currentParentUser.full_name || '');
+      setChangePhone(currentParentUser.phone || '');
+      setChangeTelegram(currentParentUser.telegram || '');
+      setChangeWhatsapp(currentParentUser.whatsapp || '');
     }
   }, [currentParentUser]);
 
@@ -933,6 +963,10 @@ function StudentModal({
           login: newLogin.trim(),
           password: newPassword.trim(),
           role: 'PARENT',
+          full_name: parentFullName.trim() || null,
+          phone: parentPhone.trim() || null,
+          telegram: parentTelegram.trim() || null,
+          whatsapp: parentWhatsapp.trim() || null,
         });
         resolvedParentId = createdUser.id;
       } else if (resetAccount && form.parent_id) {
@@ -940,6 +974,10 @@ function StudentModal({
           login: changeLogin.trim(),
           role: 'PARENT',
           password: changePassword.trim() || undefined,
+          full_name: changeFullName.trim() || null,
+          phone: changePhone.trim() || null,
+          telegram: changeTelegram.trim() || null,
+          whatsapp: changeWhatsapp.trim() || null,
         });
       }
 
@@ -970,7 +1008,7 @@ function StudentModal({
           </button>
         </div>
 
-        <label htmlFor="student_form_name">Имя ученика *</label>
+        <label htmlFor="student_form_name">ФИО ученика *</label>
         <input
           id="student_form_name"
           name="name"
@@ -982,17 +1020,35 @@ function StudentModal({
               setNewLogin(val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '') + '_parent');
             }
           }}
-          placeholder="ФИО ученика"
+          placeholder="Иванов Иван Иванович"
           required
         />
 
-        <label htmlFor="student_form_phone">Телефон</label>
+        <label htmlFor="student_form_phone">Телефон ученика</label>
         <input
           id="student_form_phone"
           name="phone"
           value={form.phone || ''}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
           placeholder="+7 (999) 000-00-00"
+        />
+
+        <label htmlFor="student_form_telegram">Telegram ученика</label>
+        <input
+          id="student_form_telegram"
+          name="telegram"
+          value={form.telegram || ''}
+          onChange={(e) => setForm({ ...form, telegram: e.target.value })}
+          placeholder="@username"
+        />
+
+        <label htmlFor="student_form_whatsapp">WhatsApp ученика</label>
+        <input
+          id="student_form_whatsapp"
+          name="whatsapp"
+          value={form.whatsapp || ''}
+          onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+          placeholder="Номер WhatsApp"
         />
 
         <label htmlFor="student_form_subject">Предмет</label>
@@ -1056,7 +1112,9 @@ function StudentModal({
               >
                 <option value="">Без аккаунта</option>
                 {parentsList.map((p) => (
-                  <option key={p.id} value={p.id}>{p.login} (ID: {p.id})</option>
+                  <option key={p.id} value={p.id}>
+                    {p.full_name ? `${p.full_name} (${p.login})` : `${p.login} (ID: ${p.id})`}
+                  </option>
                 ))}
               </select>
 
@@ -1067,13 +1125,49 @@ function StudentModal({
                   style={{ justifySelf: 'start' }}
                   onClick={() => setResetAccount(true)}
                 >
-                  <KeyRound size={14} /> Сменить логин / пароль родителю
+                  <KeyRound size={14} /> Редактировать данные / пароль родителю
                 </button>
               )}
 
               {resetAccount && (
                 <div style={{ display: 'grid', gap: '8px', marginTop: '6px' }}>
-                  <label htmlFor="parent_change_login">Логин родителя</label>
+                  <label htmlFor="parent_change_fullname">ФИО родителя</label>
+                  <input
+                    id="parent_change_fullname"
+                    name="parent_change_fullname"
+                    value={changeFullName}
+                    onChange={(e) => setChangeFullName(e.target.value)}
+                    placeholder="ФИО родителя"
+                  />
+
+                  <label htmlFor="parent_change_phone">Телефон родителя</label>
+                  <input
+                    id="parent_change_phone"
+                    name="parent_change_phone"
+                    value={changePhone}
+                    onChange={(e) => setChangePhone(e.target.value)}
+                    placeholder="+7 (999) 000-00-00"
+                  />
+
+                  <label htmlFor="parent_change_telegram">Telegram родителя</label>
+                  <input
+                    id="parent_change_telegram"
+                    name="parent_change_telegram"
+                    value={changeTelegram}
+                    onChange={(e) => setChangeTelegram(e.target.value)}
+                    placeholder="@username"
+                  />
+
+                  <label htmlFor="parent_change_whatsapp">WhatsApp родителя</label>
+                  <input
+                    id="parent_change_whatsapp"
+                    name="parent_change_whatsapp"
+                    value={changeWhatsapp}
+                    onChange={(e) => setChangeWhatsapp(e.target.value)}
+                    placeholder="Номер WhatsApp"
+                  />
+
+                  <label htmlFor="parent_change_login">Логин родителя *</label>
                   <input
                     id="parent_change_login"
                     name="parent_change_login"
@@ -1116,7 +1210,34 @@ function StudentModal({
                 name="parent_full_name"
                 value={parentFullName}
                 onChange={(e) => setParentFullName(e.target.value)}
-                placeholder="Имя и Фамилия родителя"
+                placeholder="Иванова Мария Сергеевна"
+              />
+
+              <label htmlFor="parent_phone">Телефон родителя</label>
+              <input
+                id="parent_phone"
+                name="parent_phone"
+                value={parentPhone}
+                onChange={(e) => setParentPhone(e.target.value)}
+                placeholder="+7 (999) 000-00-00"
+              />
+
+              <label htmlFor="parent_telegram">Telegram родителя</label>
+              <input
+                id="parent_telegram"
+                name="parent_telegram"
+                value={parentTelegram}
+                onChange={(e) => setParentTelegram(e.target.value)}
+                placeholder="@username"
+              />
+
+              <label htmlFor="parent_whatsapp">WhatsApp родителя</label>
+              <input
+                id="parent_whatsapp"
+                name="parent_whatsapp"
+                value={parentWhatsapp}
+                onChange={(e) => setParentWhatsapp(e.target.value)}
+                placeholder="Номер WhatsApp"
               />
 
               <label htmlFor="parent_new_login">Логин для родителя *</label>
@@ -1381,6 +1502,10 @@ function TutorModal({
           login: newLogin.trim(),
           password: newPassword.trim(),
           role: 'TUTOR',
+          full_name: form.name.trim() || null,
+          phone: form.phone || null,
+          telegram: form.telegram || null,
+          whatsapp: form.whatsapp || null,
         });
         resolvedUserId = createdUser.id;
       } else if (resetAccount && form.user_id) {
@@ -1388,6 +1513,10 @@ function TutorModal({
           login: changeLogin.trim(),
           role: 'TUTOR',
           password: changePassword.trim() || undefined,
+          full_name: form.name.trim() || null,
+          phone: form.phone || null,
+          telegram: form.telegram || null,
+          whatsapp: form.whatsapp || null,
         });
       }
 
@@ -1507,7 +1636,9 @@ function TutorModal({
               >
                 <option value="">Без привязки к аккаунту</option>
                 {tutorUsersList.map((u) => (
-                  <option key={u.id} value={u.id}>{u.login} (ID: {u.id})</option>
+                  <option key={u.id} value={u.id}>
+                    {u.full_name ? `${u.full_name} (${u.login})` : `${u.login} (ID: ${u.id})`}
+                  </option>
                 ))}
               </select>
 
@@ -1646,7 +1777,7 @@ function ParentsManagementPage({ currentUser }: { currentUser: User }) {
       alert('Нельзя удалить собственного пользователя');
       return;
     }
-    if (!window.confirm(`Удалить аккаунт родителя "${parent.login}"?`)) return;
+    if (!window.confirm(`Удалить аккаунт родителя "${parent.full_name || parent.login}"?`)) return;
     try {
       await usersApi.delete(parent.id);
       load();
@@ -1660,7 +1791,7 @@ function ParentsManagementPage({ currentUser }: { currentUser: User }) {
       <div className="section-head">
         <div>
           <h1>Родители</h1>
-          <p>Создание и редактирование учетных записей родителей, смена доступов и сброс паролей.</p>
+          <p>Создание и редактирование учетных записей родителей, ФИО, контактов, смена доступов и сброс паролей.</p>
         </div>
         <button className="primary" onClick={() => setActiveModal('create')}>
           <Plus size={18} /> Добавить родителя
@@ -1672,7 +1803,9 @@ function ParentsManagementPage({ currentUser }: { currentUser: User }) {
           <thead>
             <tr>
               <th>ID</th>
+              <th>ФИО родителя</th>
               <th>Логин (ЛК)</th>
+              <th>Контакты</th>
               <th>Привязанные ученики (дети)</th>
               <th>Дата регистрации</th>
               <th>Действия</th>
@@ -1684,11 +1817,15 @@ function ParentsManagementPage({ currentUser }: { currentUser: User }) {
               return (
                 <tr key={p.id}>
                   <td>{p.id}</td>
+                  <td><strong>{p.full_name || '—'}</strong></td>
                   <td>
                     <span className="account-pill">
                       <UserCheck size={14} color="var(--accent-strong)" />
                       <strong>{p.login}</strong>
                     </span>
+                  </td>
+                  <td>
+                    <ContactBadges phone={p.phone} telegram={p.telegram} whatsapp={p.whatsapp} />
                   </td>
                   <td>
                     {children.length > 0 ? (
@@ -1700,8 +1837,8 @@ function ParentsManagementPage({ currentUser }: { currentUser: User }) {
                   <td>{new Date(p.created_at).toLocaleString('ru-RU')}</td>
                   <td>
                     <div className="table-actions">
-                      <button className="action-btn" title="Сменить логин или пароль" onClick={() => setActiveModal(p)}>
-                        <Pencil size={14} /> Сменить логин / пароль
+                      <button className="action-btn" title="Сменить ФИО, контакты, логин или пароль" onClick={() => setActiveModal(p)}>
+                        <Pencil size={14} /> Редактировать
                       </button>
                       <button className="action-btn danger" title="Удалить" onClick={() => handleDelete(p)}>
                         <Trash2 size={14} />
@@ -1713,7 +1850,7 @@ function ParentsManagementPage({ currentUser }: { currentUser: User }) {
             })}
             {!parents.length && (
               <tr>
-                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
                   Родители пока не добавлены
                 </td>
               </tr>
@@ -1742,6 +1879,10 @@ function ParentAccountModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [fullName, setFullName] = useState(initialData?.full_name || '');
+  const [phone, setPhone] = useState(initialData?.phone || '');
+  const [telegram, setTelegram] = useState(initialData?.telegram || '');
+  const [whatsapp, setWhatsapp] = useState(initialData?.whatsapp || '');
   const [login, setLogin] = useState(initialData ? initialData.login : '');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -1760,7 +1901,7 @@ function ParentAccountModal({
   }
 
   function copyCredentials() {
-    navigator.clipboard.writeText(`Логин: ${login}\nПароль: ${password}`);
+    navigator.clipboard.writeText(`Логин: ${login}\nПароль: ${password}${fullName ? `\nФИО: ${fullName}` : ''}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   }
@@ -1770,13 +1911,29 @@ function ParentAccountModal({
     setError('');
     try {
       if (initialData) {
-        await usersApi.update(initialData.id, { login, role: 'PARENT', password: password || undefined });
+        await usersApi.update(initialData.id, {
+          login,
+          role: 'PARENT',
+          password: password || undefined,
+          full_name: fullName.trim() || null,
+          phone: phone.trim() || null,
+          telegram: telegram.trim() || null,
+          whatsapp: whatsapp.trim() || null,
+        });
       } else {
         if (!password || password.length < 8) {
           setError('Пароль должен содержать минимум 8 символов');
           return;
         }
-        await usersApi.create({ login, role: 'PARENT', password });
+        await usersApi.create({
+          login,
+          role: 'PARENT',
+          password,
+          full_name: fullName.trim() || null,
+          phone: phone.trim() || null,
+          telegram: telegram.trim() || null,
+          whatsapp: whatsapp.trim() || null,
+        });
       }
       onSaved();
     } catch (err) {
@@ -1793,6 +1950,48 @@ function ParentAccountModal({
             <X size={20} />
           </button>
         </div>
+
+        <label htmlFor="parent_account_fullname">ФИО родителя</label>
+        <input
+          id="parent_account_fullname"
+          name="full_name"
+          value={fullName}
+          onChange={(e) => {
+            const val = e.target.value;
+            setFullName(val);
+            if (!initialData && !login && val) {
+              setLogin(val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '') + '_parent');
+            }
+          }}
+          placeholder="Иванова Мария Сергеевна"
+        />
+
+        <label htmlFor="parent_account_phone">Телефон</label>
+        <input
+          id="parent_account_phone"
+          name="phone"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="+7 (999) 000-00-00"
+        />
+
+        <label htmlFor="parent_account_telegram">Telegram</label>
+        <input
+          id="parent_account_telegram"
+          name="telegram"
+          value={telegram}
+          onChange={(e) => setTelegram(e.target.value)}
+          placeholder="@username"
+        />
+
+        <label htmlFor="parent_account_whatsapp">WhatsApp</label>
+        <input
+          id="parent_account_whatsapp"
+          name="whatsapp"
+          value={whatsapp}
+          onChange={(e) => setWhatsapp(e.target.value)}
+          placeholder="Номер WhatsApp"
+        />
 
         <label htmlFor="parent_account_login">Логин *</label>
         <input
@@ -1864,7 +2063,7 @@ function AdminsManagementPage({ currentUser }: { currentUser: User }) {
       alert('Нельзя удалить собственный аккаунт');
       return;
     }
-    if (!window.confirm(`Удалить администратора "${admin.login}"?`)) return;
+    if (!window.confirm(`Удалить администратора "${admin.full_name || admin.login}"?`)) return;
     try {
       await usersApi.delete(admin.id);
       load();
@@ -1879,7 +2078,7 @@ function AdminsManagementPage({ currentUser }: { currentUser: User }) {
         <div>
           <h1>Администраторы системы</h1>
           <p>
-            👑 Раздел доступен только <strong>Супер Администратору</strong>. Создание администраторов, выдача и сброс логинов и паролей.
+            👑 Раздел доступен только <strong>Супер Администратору</strong>. Создание администраторов, ФИО, контакты, выдача и сброс логинов и паролей.
           </p>
         </div>
         <button className="primary" onClick={() => setActiveModal('create')}>
@@ -1892,7 +2091,9 @@ function AdminsManagementPage({ currentUser }: { currentUser: User }) {
           <thead>
             <tr>
               <th>ID</th>
+              <th>ФИО администратора</th>
               <th>Логин</th>
+              <th>Контакты</th>
               <th>Роль</th>
               <th>Дата создания</th>
               <th>Действия</th>
@@ -1902,13 +2103,17 @@ function AdminsManagementPage({ currentUser }: { currentUser: User }) {
             {admins.map((adm) => (
               <tr key={adm.id}>
                 <td>{adm.id}</td>
+                <td><strong>{adm.full_name || '—'}</strong></td>
                 <td><strong>{adm.login}</strong></td>
+                <td>
+                  <ContactBadges phone={adm.phone} telegram={adm.telegram} whatsapp={adm.whatsapp} />
+                </td>
                 <td><span className={roleBadgeClass(adm.role)}>{roleLabel(adm.role)}</span></td>
                 <td>{new Date(adm.created_at).toLocaleString('ru-RU')}</td>
                 <td>
                   <div className="table-actions">
                     <button className="action-btn" title="Сменить логин или пароль" onClick={() => setActiveModal(adm)}>
-                      <Pencil size={14} /> Сменить логин / пароль
+                      <Pencil size={14} /> Редактировать
                     </button>
                     {adm.id !== currentUser.id && (
                       <button className="action-btn danger" title="Удалить администратора" onClick={() => handleDelete(adm)}>
@@ -1921,7 +2126,7 @@ function AdminsManagementPage({ currentUser }: { currentUser: User }) {
             ))}
             {!admins.length && (
               <tr>
-                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
                   Администраторы пока не созданы
                 </td>
               </tr>
@@ -1950,6 +2155,10 @@ function AdminAccountModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [fullName, setFullName] = useState(initialData?.full_name || '');
+  const [phone, setPhone] = useState(initialData?.phone || '');
+  const [telegram, setTelegram] = useState(initialData?.telegram || '');
+  const [whatsapp, setWhatsapp] = useState(initialData?.whatsapp || '');
   const [login, setLogin] = useState(initialData ? initialData.login : '');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -1968,7 +2177,7 @@ function AdminAccountModal({
   }
 
   function copyCredentials() {
-    navigator.clipboard.writeText(`Логин: ${login}\nПароль: ${password}`);
+    navigator.clipboard.writeText(`Логин: ${login}\nПароль: ${password}${fullName ? `\nФИО: ${fullName}` : ''}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   }
@@ -1978,13 +2187,29 @@ function AdminAccountModal({
     setError('');
     try {
       if (initialData) {
-        await usersApi.update(initialData.id, { login, role: 'ADMIN', password: password || undefined });
+        await usersApi.update(initialData.id, {
+          login,
+          role: 'ADMIN',
+          password: password || undefined,
+          full_name: fullName.trim() || null,
+          phone: phone.trim() || null,
+          telegram: telegram.trim() || null,
+          whatsapp: whatsapp.trim() || null,
+        });
       } else {
         if (!password || password.length < 8) {
           setError('Пароль должен содержать минимум 8 символов');
           return;
         }
-        await usersApi.create({ login, role: 'ADMIN', password });
+        await usersApi.create({
+          login,
+          role: 'ADMIN',
+          password,
+          full_name: fullName.trim() || null,
+          phone: phone.trim() || null,
+          telegram: telegram.trim() || null,
+          whatsapp: whatsapp.trim() || null,
+        });
       }
       onSaved();
     } catch (err) {
@@ -2001,6 +2226,42 @@ function AdminAccountModal({
             <X size={20} />
           </button>
         </div>
+
+        <label htmlFor="admin_account_fullname">ФИО администратора</label>
+        <input
+          id="admin_account_fullname"
+          name="full_name"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          placeholder="Петров Алексей Николаевич"
+        />
+
+        <label htmlFor="admin_account_phone">Телефон</label>
+        <input
+          id="admin_account_phone"
+          name="phone"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="+7 (999) 000-00-00"
+        />
+
+        <label htmlFor="admin_account_telegram">Telegram</label>
+        <input
+          id="admin_account_telegram"
+          name="telegram"
+          value={telegram}
+          onChange={(e) => setTelegram(e.target.value)}
+          placeholder="@username"
+        />
+
+        <label htmlFor="admin_account_whatsapp">WhatsApp</label>
+        <input
+          id="admin_account_whatsapp"
+          name="whatsapp"
+          value={whatsapp}
+          onChange={(e) => setWhatsapp(e.target.value)}
+          placeholder="Номер WhatsApp"
+        />
 
         <label htmlFor="admin_account_login">Логин *</label>
         <input

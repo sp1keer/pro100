@@ -40,6 +40,10 @@ class User(Base):
     login: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), index=True)
+    full_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    telegram: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    whatsapp: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tutor: Mapped["Tutor | None"] = relationship(back_populates="user")
@@ -71,6 +75,8 @@ class Client(Base):
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     tutor_id: Mapped[int | None] = mapped_column(ForeignKey("tutors.id", ondelete="SET NULL"), index=True)
     phone: Mapped[str | None] = mapped_column(String(64))
+    telegram: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    whatsapp: Mapped[str | None] = mapped_column(String(64), nullable=True)
     subject: Mapped[str | None] = mapped_column(String(120), index=True)
 
     parent: Mapped[User | None] = relationship(back_populates="children")
