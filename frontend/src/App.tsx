@@ -22,7 +22,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { authApi, clientsApi, lessonsApi, reportsApi, tokenStore, tutorsApi, usersApi } from './api';
 import type { Client, Lesson, LessonsReport, LessonStatus, LessonType, Role, SalaryReportItem, Tutor, User } from './types';
 
-type Page = 'profile' | 'lessons' | 'clients' | 'tutors' | 'users' | 'admins' | 'reports';
+type Page = 'profile' | 'lessons' | 'students' | 'clients' | 'tutors' | 'users' | 'admins' | 'reports';
 type ViewMode = 'day' | 'week' | 'month';
 
 function roleLabel(role: Role): string {
@@ -96,16 +96,22 @@ const emptyClient: Omit<Client, 'id'> = {
   subject: '',
 };
 
-const VALID_PAGES: Page[] = ['profile', 'lessons', 'clients', 'tutors', 'users', 'admins', 'reports'];
+const VALID_PAGES: Page[] = ['profile', 'lessons', 'students', 'clients', 'tutors', 'users', 'admins', 'reports'];
+
+function normalizePage(raw: string): Page {
+  if (raw === 'clients') return 'students';
+  if (VALID_PAGES.includes(raw as Page)) return raw as Page;
+  return 'lessons';
+}
 
 function getInitialPage(): Page {
-  const hash = window.location.hash.replace('#', '') as Page;
-  if (VALID_PAGES.includes(hash)) {
-    return hash;
+  const hash = window.location.hash.replace('#', '');
+  if (hash) {
+    return normalizePage(hash);
   }
-  const saved = localStorage.getItem('pro100_active_page') as Page;
-  if (VALID_PAGES.includes(saved)) {
-    return saved;
+  const saved = localStorage.getItem('pro100_active_page');
+  if (saved) {
+    return normalizePage(saved);
   }
   return 'lessons';
 }
@@ -117,18 +123,18 @@ function AppShell() {
   const [loading, setLoading] = useState(true);
 
   const setPage = (newPage: Page) => {
-    setPageState(newPage);
-    window.location.hash = newPage;
-    localStorage.setItem('pro100_active_page', newPage);
+    const normalized = normalizePage(newPage);
+    setPageState(normalized);
+    window.location.hash = normalized;
+    localStorage.setItem('pro100_active_page', normalized);
   };
 
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '') as Page;
-      if (VALID_PAGES.includes(hash)) {
-        setPageState(hash);
-        localStorage.setItem('pro100_active_page', hash);
-      }
+      const hash = window.location.hash.replace('#', '');
+      const normalized = normalizePage(hash);
+      setPageState(normalized);
+      localStorage.setItem('pro100_active_page', normalized);
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -167,7 +173,7 @@ function AppShell() {
   const nav = [
     { id: 'profile' as const, title: 'Мой профиль', icon: UserRound, visible: true },
     { id: 'lessons' as const, title: 'Уроки', icon: CalendarDays, visible: true },
-    { id: 'clients' as const, title: 'Клиенты', icon: Users, visible: true },
+    { id: 'students' as const, title: 'Ученики', icon: Users, visible: true },
     { id: 'tutors' as const, title: 'Педагоги', icon: GraduationCap, visible: true },
     { id: 'reports' as const, title: 'Отчёты', icon: LayoutDashboard, visible: isAdmin },
     { id: 'users' as const, title: 'Пользователи', icon: SlidersHorizontal, visible: isAdmin },
@@ -180,7 +186,11 @@ function AppShell() {
         <div className="brand"><span>p100</span> pro100_repik</div>
         <nav>
           {nav.map((item) => (
-            <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => setPage(item.id)}>
+            <button
+              key={item.id}
+              className={page === item.id || (item.id === 'students' && page === 'clients') ? 'active' : ''}
+              onClick={() => setPage(item.id)}
+            >
               <item.icon size={18} />
               {item.title}
             </button>
@@ -189,9 +199,15 @@ function AppShell() {
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <label className="search">
+          <label className="search" htmlFor="global_search">
             <Search size={18} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск" />
+            <input
+              id="global_search"
+              name="global_search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Поиск"
+            />
           </label>
           <div className="profile-chip">
             <span>{user.login}</span>
@@ -210,7 +226,7 @@ function AppShell() {
         <main>
           {page === 'profile' && <Profile user={user} />}
           {page === 'lessons' && <LessonsPage user={user} />}
-          {page === 'clients' && <ClientsPage user={user} search={query} />}
+          {(page === 'students' || page === 'clients') && <StudentsPage user={user} search={query} />}
           {page === 'tutors' && <TutorsPage user={user} />}
           {page === 'reports' && <ReportsPage />}
           {page === 'users' && <UsersManagementPage currentUser={user} />}
@@ -243,10 +259,29 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
       <form className="login-card" onSubmit={submit}>
         <div className="brand large"><span>p100</span> pro100_repik</div>
         <h1>Вход в систему</h1>
-        <input value={login} onChange={(event) => setLogin(event.target.value)} placeholder="Логин" />
-        <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Пароль" type="password" />
+        <label htmlFor="login_username">Логин</label>
+        <input
+          id="login_username"
+          name="username"
+          value={login}
+          onChange={(event) => setLogin(event.target.value)}
+          placeholder="Логин"
+          autoComplete="username"
+          required
+        />
+        <label htmlFor="login_password">Пароль</label>
+        <input
+          id="login_password"
+          name="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="Пароль"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
         {error && <p className="error">{error}</p>}
-        <button className="primary">Войти</button>
+        <button className="primary" type="submit">Войти</button>
       </form>
     </div>
   );
@@ -283,7 +318,7 @@ function Profile({ user }: { user: User }) {
         )}
         {user.role === 'PARENT' && (
           <p>
-            👨‍👩‍👦 <strong>Родитель:</strong> Личный кабинет с просмотром расписания ваших детей, статусов проведенных уроков и информации об оплатах.
+            👨‍👩‍👦 <strong>Родитель:</strong> Личный кабинет с просмотром расписания ваших детей (учеников), статусов проведенных уроков и информации об оплатах.
           </p>
         )}
       </div>
@@ -336,20 +371,55 @@ function LessonsPage({ user }: { user: User }) {
       </div>
       <div className="toolbar">
         <Segment<ViewMode> value={view} onChange={setView} options={[['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']]} />
-        <input type="date" value={filters.date_from} onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
-        <input type="date" value={filters.date_to} onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} />
-        <input placeholder="Предмет" value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })} />
-        <select value={filters.tutor_id} onChange={(e) => setFilters({ ...filters, tutor_id: e.target.value })}>
-          <option value="">Педагог</option>
+        <input
+          id="filter_date_from"
+          name="filter_date_from"
+          type="date"
+          title="Дата с"
+          value={filters.date_from}
+          onChange={(e) => setFilters({ ...filters, date_from: e.target.value })}
+        />
+        <input
+          id="filter_date_to"
+          name="filter_date_to"
+          type="date"
+          title="Дата по"
+          value={filters.date_to}
+          onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
+        />
+        <input
+          id="filter_subject"
+          name="filter_subject"
+          placeholder="Предмет"
+          value={filters.subject}
+          onChange={(e) => setFilters({ ...filters, subject: e.target.value })}
+        />
+        <select
+          id="filter_tutor_id"
+          name="filter_tutor_id"
+          value={filters.tutor_id}
+          onChange={(e) => setFilters({ ...filters, tutor_id: e.target.value })}
+        >
+          <option value="">Все педагоги</option>
           {tutors.map((tutor) => <option key={tutor.id} value={tutor.id}>{tutor.name}</option>)}
         </select>
-        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
-          <option value="">Тип</option>
+        <select
+          id="filter_lesson_type"
+          name="filter_lesson_type"
+          value={filters.type}
+          onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+        >
+          <option value="">Все типы</option>
           <option value="GROUP">Группа</option>
           <option value="INDIVIDUAL">Индивидуально</option>
           <option value="TRIAL">Пробное</option>
         </select>
-        <select value={filters.payment_status} onChange={(e) => setFilters({ ...filters, payment_status: e.target.value })}>
+        <select
+          id="filter_payment_status"
+          name="filter_payment_status"
+          value={filters.payment_status}
+          onChange={(e) => setFilters({ ...filters, payment_status: e.target.value })}
+        >
           <option value="">Оплата</option>
           <option value="PAID">Оплачено</option>
           <option value="PARTIAL">Частично</option>
@@ -450,7 +520,7 @@ function CalendarGrid({
                           </div>
                         )}
                       </div>
-                      <span>{client?.name || 'Клиент'} · {tutor?.name || 'Педагог'}</span>
+                      <span>{client?.name || 'Ученик'} · {tutor?.name || 'Педагог'}</span>
                       <small>{lesson.type} · {lesson.payment_status}</small>
                       {editable && (
                         <div className="inline-actions">
@@ -517,48 +587,111 @@ function LessonModal({
     <div className="modal-backdrop">
       <form className="modal" onSubmit={submit}>
         <h2>{initialData ? 'Редактировать занятие' : 'Добавить занятие'}</h2>
-        {!clients.length && <p className="error">Сначала создайте клиента в разделе "Клиенты".</p>}
+        {!clients.length && <p className="error">Сначала создайте ученика в разделе "Ученики".</p>}
         {!tutors.length && <p className="error">Сначала создайте педагога в разделе "Педагоги".</p>}
         
-        <label>Дата</label>
-        <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+        <label htmlFor="lesson_form_date">Дата *</label>
+        <input
+          id="lesson_form_date"
+          name="date"
+          type="date"
+          value={form.date}
+          onChange={(e) => setForm({ ...form, date: e.target.value })}
+          required
+        />
         
-        <label>Время начала</label>
-        <input type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} required />
+        <label htmlFor="lesson_form_start_time">Время начала *</label>
+        <input
+          id="lesson_form_start_time"
+          name="start_time"
+          type="time"
+          value={form.start_time}
+          onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+          required
+        />
         
-        <label>Длительность (минут)</label>
-        <input type="number" value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: Number(e.target.value) })} placeholder="Длительность" required />
+        <label htmlFor="lesson_form_duration">Длительность (минут) *</label>
+        <input
+          id="lesson_form_duration"
+          name="duration_minutes"
+          type="number"
+          value={form.duration_minutes}
+          onChange={(e) => setForm({ ...form, duration_minutes: Number(e.target.value) })}
+          placeholder="Длительность"
+          required
+        />
         
-        <label>Аудитория</label>
-        <input value={form.classroom || ''} onChange={(e) => setForm({ ...form, classroom: e.target.value })} placeholder="Аудитория" />
+        <label htmlFor="lesson_form_classroom">Аудитория</label>
+        <input
+          id="lesson_form_classroom"
+          name="classroom"
+          value={form.classroom || ''}
+          onChange={(e) => setForm({ ...form, classroom: e.target.value })}
+          placeholder="Аудитория"
+        />
         
-        <label>Предмет *</label>
-        <input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Предмет" required />
+        <label htmlFor="lesson_form_subject">Предмет *</label>
+        <input
+          id="lesson_form_subject"
+          name="subject"
+          value={form.subject}
+          onChange={(e) => setForm({ ...form, subject: e.target.value })}
+          placeholder="Предмет"
+          required
+        />
         
-        <label>Тема</label>
-        <input value={form.topic || ''} onChange={(e) => setForm({ ...form, topic: e.target.value })} placeholder="Тема" />
+        <label htmlFor="lesson_form_topic">Тема</label>
+        <input
+          id="lesson_form_topic"
+          name="topic"
+          value={form.topic || ''}
+          onChange={(e) => setForm({ ...form, topic: e.target.value })}
+          placeholder="Тема"
+        />
         
-        <label>Клиент *</label>
-        <select value={form.client_id} onChange={(e) => setForm({ ...form, client_id: Number(e.target.value) })} required>
-          <option value={0}>Выберите клиента</option>
+        <label htmlFor="lesson_form_client_id">Ученик *</label>
+        <select
+          id="lesson_form_client_id"
+          name="client_id"
+          value={form.client_id}
+          onChange={(e) => setForm({ ...form, client_id: Number(e.target.value) })}
+          required
+        >
+          <option value={0}>Выберите ученика</option>
           {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
         </select>
         
-        <label>Педагог *</label>
-        <select value={form.tutor_id} onChange={(e) => setForm({ ...form, tutor_id: Number(e.target.value) })} required>
+        <label htmlFor="lesson_form_tutor_id">Педагог *</label>
+        <select
+          id="lesson_form_tutor_id"
+          name="tutor_id"
+          value={form.tutor_id}
+          onChange={(e) => setForm({ ...form, tutor_id: Number(e.target.value) })}
+          required
+        >
           <option value={0}>Выберите педагога</option>
           {tutors.map((tutor) => <option key={tutor.id} value={tutor.id}>{tutor.name}</option>)}
         </select>
         
-        <label>Тип занятия</label>
-        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as LessonType })}>
+        <label htmlFor="lesson_form_type">Тип занятия</label>
+        <select
+          id="lesson_form_type"
+          name="type"
+          value={form.type}
+          onChange={(e) => setForm({ ...form, type: e.target.value as LessonType })}
+        >
           <option value="INDIVIDUAL">Индивидуально</option>
           <option value="GROUP">Группа</option>
           <option value="TRIAL">Пробное</option>
         </select>
         
-        <label>Статус</label>
-        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as LessonStatus })}>
+        <label htmlFor="lesson_form_status">Статус</label>
+        <select
+          id="lesson_form_status"
+          name="status"
+          value={form.status}
+          onChange={(e) => setForm({ ...form, status: e.target.value as LessonStatus })}
+        >
           <option value="PLANNED">Запланировано</option>
           <option value="DONE">Проведено</option>
           <option value="CANCELLED">Отменено</option>
@@ -574,7 +707,7 @@ function LessonModal({
   );
 }
 
-function ClientsPage({ user, search }: { user: User; search: string }) {
+function StudentsPage({ user, search }: { user: User; search: string }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [tutors, setTutors] = useState<Tutor[]>([]);
@@ -595,12 +728,12 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
   }, [search]);
 
   async function handleDelete(id: number) {
-    if (!window.confirm('Удалить этого клиента?')) return;
+    if (!window.confirm('Удалить этого ученика?')) return;
     try {
       await clientsApi.delete(id);
       load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Не удалось удалить клиента');
+      alert(err instanceof Error ? err.message : 'Не удалось удалить ученика');
     }
   }
 
@@ -610,12 +743,12 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
     <section className="panel">
       <div className="section-head">
         <div>
-          <h1>Клиенты и ученики</h1>
+          <h1>Ученики</h1>
           <p>Карточки учеников, привязка к родительским аккаунтам и педагогам.</p>
         </div>
         {isAdmin && (
           <button className="primary" onClick={() => setActiveModal('create')}>
-            <Plus size={18} /> Добавить клиента
+            <Plus size={18} /> Добавить ученика
           </button>
         )}
       </div>
@@ -672,7 +805,7 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
             {!clients.length && (
               <tr>
                 <td colSpan={isAdmin ? 7 : 6} style={{ textAlign: 'center', color: 'var(--muted)' }}>
-                  Клиенты не найдены
+                  Ученики не найдены
                 </td>
               </tr>
             )}
@@ -681,7 +814,7 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
       </div>
 
       {activeModal && (
-        <ClientModal
+        <StudentModal
           initialData={activeModal === 'create' ? null : activeModal}
           parentsList={parentsList}
           tutorsList={tutors}
@@ -693,7 +826,7 @@ function ClientsPage({ user, search }: { user: User; search: string }) {
   );
 }
 
-function ClientModal({
+function StudentModal({
   initialData,
   parentsList,
   tutorsList,
@@ -784,19 +917,43 @@ function ClientModal({
   return (
     <div className="modal-backdrop">
       <form className="modal" onSubmit={submit}>
-        <h2>{initialData ? 'Редактировать клиента' : 'Добавить клиента'}</h2>
+        <h2>{initialData ? 'Редактировать ученика' : 'Добавить ученика'}</h2>
 
-        <label>Имя ученика / клиента *</label>
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ФИО ученика" required />
+        <label htmlFor="student_form_name">Имя ученика *</label>
+        <input
+          id="student_form_name"
+          name="name"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          placeholder="ФИО ученика"
+          required
+        />
 
-        <label>Телефон</label>
-        <input value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+7 (999) 000-00-00" />
+        <label htmlFor="student_form_phone">Телефон</label>
+        <input
+          id="student_form_phone"
+          name="phone"
+          value={form.phone || ''}
+          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          placeholder="+7 (999) 000-00-00"
+        />
 
-        <label>Предмет</label>
-        <input value={form.subject || ''} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Например: Математика" />
+        <label htmlFor="student_form_subject">Предмет</label>
+        <input
+          id="student_form_subject"
+          name="subject"
+          value={form.subject || ''}
+          onChange={(e) => setForm({ ...form, subject: e.target.value })}
+          placeholder="Например: Математика"
+        />
 
-        <label>Привязанный педагог</label>
-        <select value={form.tutor_id ?? ''} onChange={(e) => setForm({ ...form, tutor_id: e.target.value ? Number(e.target.value) : null })}>
+        <label htmlFor="student_form_tutor_id">Привязанный педагог</label>
+        <select
+          id="student_form_tutor_id"
+          name="tutor_id"
+          value={form.tutor_id ?? ''}
+          onChange={(e) => setForm({ ...form, tutor_id: e.target.value ? Number(e.target.value) : null })}
+        >
           <option value="">Не выбран</option>
           {tutorsList.map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
@@ -826,8 +983,10 @@ function ClientModal({
 
           {!createAccount ? (
             <>
-              <label>Выбрать существующий аккаунт родителя:</label>
+              <label htmlFor="student_form_parent_id">Выбрать существующий аккаунт родителя:</label>
               <select
+                id="student_form_parent_id"
+                name="parent_id"
                 value={form.parent_id ?? ''}
                 onChange={(e) => {
                   setForm({ ...form, parent_id: e.target.value ? Number(e.target.value) : null });
@@ -853,16 +1012,25 @@ function ClientModal({
 
               {resetAccount && (
                 <div style={{ display: 'grid', gap: '8px', marginTop: '6px' }}>
-                  <label>Логин родителя</label>
-                  <input value={changeLogin} onChange={(e) => setChangeLogin(e.target.value)} required minLength={3} />
+                  <label htmlFor="parent_change_login">Логин родителя</label>
+                  <input
+                    id="parent_change_login"
+                    name="parent_change_login"
+                    value={changeLogin}
+                    onChange={(e) => setChangeLogin(e.target.value)}
+                    required
+                    minLength={3}
+                  />
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label>Новый пароль (мин. 8 символов)</label>
+                    <label htmlFor="parent_change_password">Новый пароль (мин. 8 символов)</label>
                     <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
                       <RefreshCw size={12} /> Сгенерировать
                     </button>
                   </div>
                   <input
+                    id="parent_change_password"
+                    name="parent_change_password"
                     type="password"
                     value={changePassword}
                     onChange={(e) => setChangePassword(e.target.value)}
@@ -881,8 +1049,10 @@ function ClientModal({
             </>
           ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
-              <label>Логин для родителя *</label>
+              <label htmlFor="parent_new_login">Логин для родителя *</label>
               <input
+                id="parent_new_login"
+                name="parent_new_login"
                 value={newLogin}
                 onChange={(e) => setNewLogin(e.target.value)}
                 placeholder="Логин (например: ivanov_parent)"
@@ -890,12 +1060,14 @@ function ClientModal({
                 minLength={3}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label>Пароль для родителя *</label>
+                <label htmlFor="parent_new_password">Пароль для родителя *</label>
                 <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
                   <RefreshCw size={12} /> Сгенерировать
                 </button>
               </div>
               <input
+                id="parent_new_password"
+                name="parent_new_password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Пароль (мин. 8 символов)"
@@ -1142,20 +1314,47 @@ function TutorModal({
       <form className="modal" onSubmit={submit}>
         <h2>{initialData ? 'Редактировать педагога' : 'Добавить педагога'}</h2>
 
-        <label>ФИО педагога *</label>
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Имя и Фамилия" required />
-
-        <label>Телефон</label>
-        <input value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+7 (999) 000-00-00" />
-
-        <label>Telegram</label>
-        <input value={form.telegram || ''} onChange={(e) => setForm({ ...form, telegram: e.target.value })} placeholder="@username" />
-
-        <label>WhatsApp</label>
-        <input value={form.whatsapp || ''} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} placeholder="Номер WhatsApp" />
-
-        <label>Ставка в час (руб.) *</label>
+        <label htmlFor="tutor_form_name">ФИО педагога *</label>
         <input
+          id="tutor_form_name"
+          name="name"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          placeholder="Имя и Фамилия"
+          required
+        />
+
+        <label htmlFor="tutor_form_phone">Телефон</label>
+        <input
+          id="tutor_form_phone"
+          name="phone"
+          value={form.phone || ''}
+          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          placeholder="+7 (999) 000-00-00"
+        />
+
+        <label htmlFor="tutor_form_telegram">Telegram</label>
+        <input
+          id="tutor_form_telegram"
+          name="telegram"
+          value={form.telegram || ''}
+          onChange={(e) => setForm({ ...form, telegram: e.target.value })}
+          placeholder="@username"
+        />
+
+        <label htmlFor="tutor_form_whatsapp">WhatsApp</label>
+        <input
+          id="tutor_form_whatsapp"
+          name="whatsapp"
+          value={form.whatsapp || ''}
+          onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+          placeholder="Номер WhatsApp"
+        />
+
+        <label htmlFor="tutor_form_rate">Ставка в час (руб.) *</label>
+        <input
+          id="tutor_form_rate"
+          name="rate_per_hour"
           type="number"
           step="0.01"
           value={form.rate_per_hour}
@@ -1187,8 +1386,10 @@ function TutorModal({
 
           {!createAccount ? (
             <>
-              <label>Привязать к существующему аккаунту:</label>
+              <label htmlFor="tutor_form_user_id">Привязать к существующему аккаунту:</label>
               <select
+                id="tutor_form_user_id"
+                name="user_id"
                 value={form.user_id ?? ''}
                 onChange={(e) => {
                   setForm({ ...form, user_id: e.target.value ? Number(e.target.value) : null });
@@ -1214,16 +1415,25 @@ function TutorModal({
 
               {resetAccount && (
                 <div style={{ display: 'grid', gap: '8px', marginTop: '6px' }}>
-                  <label>Логин педагога</label>
-                  <input value={changeLogin} onChange={(e) => setChangeLogin(e.target.value)} required minLength={3} />
+                  <label htmlFor="tutor_change_login">Логин педагога</label>
+                  <input
+                    id="tutor_change_login"
+                    name="tutor_change_login"
+                    value={changeLogin}
+                    onChange={(e) => setChangeLogin(e.target.value)}
+                    required
+                    minLength={3}
+                  />
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label>Новый пароль (мин. 8 символов)</label>
+                    <label htmlFor="tutor_change_password">Новый пароль (мин. 8 символов)</label>
                     <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
                       <RefreshCw size={12} /> Сгенерировать
                     </button>
                   </div>
                   <input
+                    id="tutor_change_password"
+                    name="tutor_change_password"
                     type="password"
                     value={changePassword}
                     onChange={(e) => setChangePassword(e.target.value)}
@@ -1242,8 +1452,10 @@ function TutorModal({
             </>
           ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
-              <label>Логин для педагога *</label>
+              <label htmlFor="tutor_new_login">Логин для педагога *</label>
               <input
+                id="tutor_new_login"
+                name="tutor_new_login"
                 value={newLogin}
                 onChange={(e) => setNewLogin(e.target.value)}
                 placeholder="Логин (например: ivanov_tutor)"
@@ -1251,12 +1463,14 @@ function TutorModal({
                 minLength={3}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label>Пароль для педагога *</label>
+                <label htmlFor="tutor_new_password">Пароль для педагога *</label>
                 <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
                   <RefreshCw size={12} /> Сгенерировать
                 </button>
               </div>
               <input
+                id="tutor_new_password"
+                name="tutor_new_password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Пароль (мин. 8 символов)"
@@ -1294,7 +1508,6 @@ function UsersManagementPage({ currentUser }: { currentUser: User }) {
 
   const load = () => {
     usersApi.list().then((data) => {
-      // Exclude ADMIN and SUPER_ADMIN from this page for clarity (admins are managed on Admins page)
       setUsers(data.filter((u) => u.role === 'TUTOR' || u.role === 'PARENT'));
     }).catch(() => setUsers([]));
   };
@@ -1551,13 +1764,26 @@ function UserAccountModal({
       <form className="modal" onSubmit={submit}>
         <h2>{initialData ? `Редактировать ${roleLabel(initialData.role)}` : `Выдать доступ (${roleLabel(role)})`}</h2>
 
-        <label>Логин *</label>
-        <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Логин (мин. 3 символа)" required minLength={3} />
+        <label htmlFor="user_modal_login">Логин *</label>
+        <input
+          id="user_modal_login"
+          name="login"
+          value={login}
+          onChange={(e) => setLogin(e.target.value)}
+          placeholder="Логин (мин. 3 символа)"
+          required
+          minLength={3}
+        />
 
         {allowedRoles.length > 1 && (
           <>
-            <label>Роль пользователя</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as 'ADMIN' | 'TUTOR' | 'PARENT')}>
+            <label htmlFor="user_modal_role">Роль пользователя</label>
+            <select
+              id="user_modal_role"
+              name="role"
+              value={role}
+              onChange={(e) => setRole(e.target.value as 'ADMIN' | 'TUTOR' | 'PARENT')}
+            >
               {allowedRoles.map((r) => (
                 <option key={r} value={r}>{roleLabel(r)} ({r})</option>
               ))}
@@ -1566,13 +1792,15 @@ function UserAccountModal({
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <label>{initialData ? 'Новый пароль' : 'Пароль *'}</label>
+          <label htmlFor="user_modal_password">{initialData ? 'Новый пароль' : 'Пароль *'}</label>
           <button type="button" className="btn-sm btn-secondary" onClick={fillGeneratedPassword}>
             <RefreshCw size={12} /> Сгенерировать надёжный пароль
           </button>
         </div>
 
         <input
+          id="user_modal_password"
+          name="password"
           type="text"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
