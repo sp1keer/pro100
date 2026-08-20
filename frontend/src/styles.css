@@ -269,18 +269,44 @@ p {
   color: #fff;
 }
 
+textarea {
+  width: 100%;
+  min-height: 76px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+textarea:focus {
+  outline: 2px solid rgba(78, 205, 196, 0.25);
+  border-color: var(--accent);
+}
+
+.calendar-scroll-wrap {
+  overflow-x: auto;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
 .calendar {
-  min-width: 760px;
+  min-width: 920px;
 }
 
 .calendar-head,
 .calendar-row {
   display: grid;
-  grid-template-columns: 72px repeat(var(--cols, 7), minmax(130px, 1fr));
+  grid-template-columns: 72px repeat(var(--cols, 7), minmax(140px, 1fr));
 }
 
 .calendar.day {
   --cols: 1;
+  min-width: 400px;
 }
 
 .calendar.week {
@@ -297,9 +323,15 @@ p {
   border: 1px solid var(--line);
   border-left: 0;
   border-top: 0;
-  min-height: 92px;
-  padding: 10px;
+  min-height: 96px;
+  padding: 8px;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.calendar-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .calendar-head span,
@@ -318,13 +350,16 @@ p {
 }
 
 .lesson-card {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 4px;
   border-left: 4px solid var(--accent);
   border-radius: 8px;
   padding: 8px;
   background: #fff;
-  box-shadow: 0 8px 20px rgba(23, 35, 38, 0.07);
+  box-shadow: 0 4px 12px rgba(23, 35, 38, 0.06);
+  min-width: 0;
+  word-break: break-word;
 }
 
 .lesson-card.cancelled {
@@ -339,6 +374,23 @@ p {
 .lesson-card span,
 .lesson-card small {
   color: var(--muted);
+}
+
+.lesson-topic-box {
+  font-size: 12px;
+  background: var(--soft);
+  padding: 4px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+  word-break: break-word;
+}
+
+.lesson-link {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  word-break: break-all;
+  display: inline-block;
+  margin-top: 2px;
 }
 
 .inline-actions {
@@ -465,7 +517,7 @@ th {
 
 .login-card,
 .modal {
-  width: min(460px, 100%);
+  width: min(500px, 100%);
   display: grid;
   gap: 12px;
   border: 1px solid var(--line);
@@ -475,6 +527,38 @@ th {
   box-shadow: var(--shadow);
   max-height: 90vh;
   overflow-y: auto;
+  position: relative;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.modal-header h2 {
+  margin: 0;
+}
+
+.close-btn {
+  border: 0;
+  background: transparent;
+  padding: 6px;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: auto;
+}
+
+.close-btn:hover {
+  background: var(--soft);
+  color: var(--ink);
+  border-color: transparent;
 }
 
 .error {

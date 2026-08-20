@@ -2,7 +2,6 @@ import {
   CalendarDays,
   Check,
   Copy,
-  Filter,
   GraduationCap,
   KeyRound,
   LayoutDashboard,
@@ -17,6 +16,7 @@ import {
   UserCheck,
   UserRound,
   Users,
+  X,
 } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { authApi, clientsApi, lessonsApi, reportsApi, tokenStore, tutorsApi, usersApi } from './api';
@@ -64,13 +64,28 @@ function generateRandomPassword(length = 10): string {
   return pass;
 }
 
+function renderTextWithLinks(text: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (part.match(urlRegex)) {
+      return (
+        <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="lesson-link">
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 const emptyLesson: Omit<Lesson, 'id'> = {
   type: 'INDIVIDUAL',
   date: new Date().toISOString().slice(0, 10),
   start_time: '10:00',
   duration_minutes: 60,
   classroom: '',
-  subject: '',
+  subject: 'Математика',
   topic: '',
   tutor_id: 0,
   client_id: 0,
@@ -93,7 +108,7 @@ const emptyClient: Omit<Client, 'id'> = {
   parent_id: null,
   tutor_id: null,
   phone: '',
-  subject: '',
+  subject: 'Математика',
 };
 
 const VALID_PAGES: Page[] = ['profile', 'lessons', 'students', 'clients', 'tutors', 'users', 'admins', 'reports'];
@@ -342,9 +357,10 @@ function LessonsPage({ user }: { user: User }) {
     clientsApi.list().then(setClients).catch(() => setClients([]));
   };
 
+  // Automatically filter whenever any filter changes
   useEffect(() => {
     load();
-  }, []);
+  }, [filters]);
 
   async function handleDeleteLesson(id: number) {
     if (!window.confirm('Удалить это занятие?')) return;
@@ -361,7 +377,7 @@ function LessonsPage({ user }: { user: User }) {
       <div className="section-head">
         <div>
           <h1>Календарь занятий</h1>
-          <p>Сетка 08:00-20:00, фильтры, статусы и управление уроками.</p>
+          <p>Сетка 08:00-20:00, мгновенные фильтры, статусы и управление уроками.</p>
         </div>
         {isAdmin && (
           <button className="primary" onClick={() => setActiveModal('create')}>
@@ -387,13 +403,15 @@ function LessonsPage({ user }: { user: User }) {
           value={filters.date_to}
           onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
         />
-        <input
+        <select
           id="filter_subject"
           name="filter_subject"
-          placeholder="Предмет"
           value={filters.subject}
           onChange={(e) => setFilters({ ...filters, subject: e.target.value })}
-        />
+        >
+          <option value="">Все предметы</option>
+          <option value="Математика">Математика</option>
+        </select>
         <select
           id="filter_tutor_id"
           name="filter_tutor_id"
@@ -410,7 +428,6 @@ function LessonsPage({ user }: { user: User }) {
           onChange={(e) => setFilters({ ...filters, type: e.target.value })}
         >
           <option value="">Все типы</option>
-          <option value="GROUP">Группа</option>
           <option value="INDIVIDUAL">Индивидуально</option>
           <option value="TRIAL">Пробное</option>
         </select>
@@ -425,9 +442,11 @@ function LessonsPage({ user }: { user: User }) {
           <option value="PARTIAL">Частично</option>
           <option value="UNPAID">Не оплачено</option>
         </select>
-        <button onClick={load}><Filter size={16} /> Фильтр</button>
-        <button onClick={() => setFilters({ date_from: '', date_to: '', tutor_id: '', subject: '', type: '', payment_status: '' })}>
-          Сбросить
+        <button
+          type="button"
+          onClick={() => setFilters({ date_from: '', date_to: '', tutor_id: '', subject: '', type: '', payment_status: '' })}
+        >
+          Сбросить фильтры
         </button>
       </div>
       <CalendarGrid
@@ -490,52 +509,59 @@ function CalendarGrid({
   }
 
   return (
-    <div className={`calendar ${view}`}>
-      <div className="calendar-head" style={{ gridTemplateColumns: `72px repeat(${columns.length}, minmax(130px, 1fr))` }}>
-        <span />
-        {columns.map((day) => <b key={day}>{new Date(day).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}</b>)}
-      </div>
-      {hours.map((hour) => (
-        <div className="calendar-row" key={hour} style={{ gridTemplateColumns: `72px repeat(${columns.length}, minmax(130px, 1fr))` }}>
-          <time>{hour}:00</time>
-          {columns.map((day) => (
-            <div className="calendar-cell" key={`${day}-${hour}`}>
-              {lessons
-                .filter((lesson) => lesson.date === day && Number(lesson.start_time.slice(0, 2)) === hour)
-                .map((lesson) => {
-                  const tutor = tutors.find((item) => item.id === lesson.tutor_id);
-                  const client = clients.find((item) => item.id === lesson.client_id);
-                  return (
-                    <article className={`lesson-card ${lesson.status.toLowerCase()}`} key={lesson.id}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <strong>{lesson.start_time.slice(0, 5)} {lesson.subject}</strong>
-                        {isAdmin && (
-                          <div className="table-actions">
-                            <button className="action-btn" title="Редактировать" onClick={() => onEdit(lesson)}>
-                              <Pencil size={12} />
-                            </button>
-                            <button className="action-btn danger" title="Удалить" onClick={() => onDelete(lesson.id)}>
-                              <Trash2 size={12} />
-                            </button>
+    <div className="calendar-scroll-wrap">
+      <div className={`calendar ${view}`}>
+        <div className="calendar-head" style={{ gridTemplateColumns: `72px repeat(${columns.length}, minmax(140px, 1fr))` }}>
+          <span />
+          {columns.map((day) => <b key={day}>{new Date(day).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}</b>)}
+        </div>
+        {hours.map((hour) => (
+          <div className="calendar-row" key={hour} style={{ gridTemplateColumns: `72px repeat(${columns.length}, minmax(140px, 1fr))` }}>
+            <time>{hour}:00</time>
+            {columns.map((day) => (
+              <div className="calendar-cell" key={`${day}-${hour}`}>
+                {lessons
+                  .filter((lesson) => lesson.date === day && Number(lesson.start_time.slice(0, 2)) === hour)
+                  .map((lesson) => {
+                    const tutor = tutors.find((item) => item.id === lesson.tutor_id);
+                    const client = clients.find((item) => item.id === lesson.client_id);
+                    return (
+                      <article className={`lesson-card ${lesson.status.toLowerCase()}`} key={lesson.id}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong>{lesson.start_time.slice(0, 5)} {lesson.subject}</strong>
+                          {isAdmin && (
+                            <div className="table-actions">
+                              <button className="action-btn" title="Редактировать" onClick={() => onEdit(lesson)}>
+                                <Pencil size={12} />
+                              </button>
+                              <button className="action-btn danger" title="Удалить" onClick={() => onDelete(lesson.id)}>
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <span>{client?.name || 'Ученик'} · {tutor?.name || 'Педагог'}</span>
+                        <small>{lesson.type === 'TRIAL' ? 'Пробное' : 'Индивидуально'} · {lesson.payment_status}</small>
+                        {lesson.topic && (
+                          <div className="lesson-topic-box">
+                            {renderTextWithLinks(lesson.topic)}
                           </div>
                         )}
-                      </div>
-                      <span>{client?.name || 'Ученик'} · {tutor?.name || 'Педагог'}</span>
-                      <small>{lesson.type} · {lesson.payment_status}</small>
-                      {editable && (
-                        <div className="inline-actions">
-                          <button onClick={() => mark(lesson, 'DONE')}>Проведено</button>
-                          <button onClick={() => mark(lesson, 'CANCELLED')}>Отменено</button>
-                          <button onClick={() => mark(lesson, lesson.status, 'PAID')}>Оплачено</button>
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
-            </div>
-          ))}
-        </div>
-      ))}
+                        {editable && (
+                          <div className="inline-actions">
+                            <button onClick={() => mark(lesson, 'DONE')}>Проведено</button>
+                            <button onClick={() => mark(lesson, 'CANCELLED')}>Отменено</button>
+                            <button onClick={() => mark(lesson, lesson.status, 'PAID')}>Оплачено</button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -559,6 +585,15 @@ function LessonModal({
       : emptyLesson
   );
   const [error, setError] = useState('');
+
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -586,7 +621,12 @@ function LessonModal({
   return (
     <div className="modal-backdrop">
       <form className="modal" onSubmit={submit}>
-        <h2>{initialData ? 'Редактировать занятие' : 'Добавить занятие'}</h2>
+        <div className="modal-header">
+          <h2>{initialData ? 'Редактировать занятие' : 'Добавить занятие'}</h2>
+          <button type="button" className="close-btn" title="Закрыть" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
         {!clients.length && <p className="error">Сначала создайте ученика в разделе "Ученики".</p>}
         {!tutors.length && <p className="error">Сначала создайте педагога в разделе "Педагоги".</p>}
         
@@ -621,34 +661,20 @@ function LessonModal({
           required
         />
         
-        <label htmlFor="lesson_form_classroom">Аудитория</label>
-        <input
-          id="lesson_form_classroom"
-          name="classroom"
-          value={form.classroom || ''}
-          onChange={(e) => setForm({ ...form, classroom: e.target.value })}
-          placeholder="Аудитория"
-        />
-        
         <label htmlFor="lesson_form_subject">Предмет *</label>
-        <input
+        <select
           id="lesson_form_subject"
           name="subject"
           value={form.subject}
           onChange={(e) => setForm({ ...form, subject: e.target.value })}
-          placeholder="Предмет"
           required
-        />
-        
-        <label htmlFor="lesson_form_topic">Тема</label>
-        <input
-          id="lesson_form_topic"
-          name="topic"
-          value={form.topic || ''}
-          onChange={(e) => setForm({ ...form, topic: e.target.value })}
-          placeholder="Тема"
-        />
-        
+        >
+          <option value="Математика">Математика</option>
+          {form.subject && form.subject !== 'Математика' && (
+            <option value={form.subject}>{form.subject}</option>
+          )}
+        </select>
+
         <label htmlFor="lesson_form_client_id">Ученик *</label>
         <select
           id="lesson_form_client_id"
@@ -677,11 +703,10 @@ function LessonModal({
         <select
           id="lesson_form_type"
           name="type"
-          value={form.type}
+          value={form.type === 'GROUP' ? 'INDIVIDUAL' : form.type}
           onChange={(e) => setForm({ ...form, type: e.target.value as LessonType })}
         >
           <option value="INDIVIDUAL">Индивидуально</option>
-          <option value="GROUP">Группа</option>
           <option value="TRIAL">Пробное</option>
         </select>
         
@@ -696,6 +721,16 @@ function LessonModal({
           <option value="DONE">Проведено</option>
           <option value="CANCELLED">Отменено</option>
         </select>
+
+        <label htmlFor="lesson_form_topic">Описание и ссылки на материалы</label>
+        <textarea
+          id="lesson_form_topic"
+          name="topic"
+          rows={3}
+          value={form.topic || ''}
+          onChange={(e) => setForm({ ...form, topic: e.target.value })}
+          placeholder="Заметки к уроку, ссылки на Zoom / онлайн-доску / домашнее задание (https://...)"
+        />
 
         {error && <p className="error">{error}</p>}
         <div className="modal-actions">
@@ -845,16 +880,27 @@ function StudentModal({
       : emptyClient
   );
   
-  // Quick account creation mode
+  // Quick parent account creation mode
   const [createAccount, setCreateAccount] = useState(false);
+  const [parentFullName, setParentFullName] = useState('');
   const [newLogin, setNewLogin] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [copiedParentCreds, setCopiedParentCreds] = useState(false);
   const [error, setError] = useState('');
 
   // Password reset for existing parent
   const [resetAccount, setResetAccount] = useState(false);
   const [changeLogin, setChangeLogin] = useState('');
   const [changePassword, setChangePassword] = useState('');
+
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   const currentParentUser = useMemo(() => parentsList.find((p) => p.id === form.parent_id), [parentsList, form.parent_id]);
 
@@ -868,6 +914,12 @@ function StudentModal({
     const pass = generateRandomPassword();
     if (createAccount) setNewPassword(pass);
     if (resetAccount) setChangePassword(pass);
+  }
+
+  function copyParentCredentials() {
+    navigator.clipboard.writeText(`Логин: ${newLogin}\nПароль: ${newPassword}${parentFullName ? `\nФИО: ${parentFullName}` : ''}`);
+    setCopiedParentCreds(true);
+    setTimeout(() => setCopiedParentCreds(false), 2500);
   }
 
   async function submit(e: FormEvent) {
@@ -917,14 +969,25 @@ function StudentModal({
   return (
     <div className="modal-backdrop">
       <form className="modal" onSubmit={submit}>
-        <h2>{initialData ? 'Редактировать ученика' : 'Добавить ученика'}</h2>
+        <div className="modal-header">
+          <h2>{initialData ? 'Редактировать ученика' : 'Добавить ученика'}</h2>
+          <button type="button" className="close-btn" title="Закрыть" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
 
         <label htmlFor="student_form_name">Имя ученика *</label>
         <input
           id="student_form_name"
           name="name"
           value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          onChange={(e) => {
+            const val = e.target.value;
+            setForm({ ...form, name: val });
+            if (createAccount && !newLogin) {
+              setNewLogin(val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '') + '_parent');
+            }
+          }}
           placeholder="ФИО ученика"
           required
         />
@@ -939,13 +1002,17 @@ function StudentModal({
         />
 
         <label htmlFor="student_form_subject">Предмет</label>
-        <input
+        <select
           id="student_form_subject"
           name="subject"
-          value={form.subject || ''}
+          value={form.subject || 'Математика'}
           onChange={(e) => setForm({ ...form, subject: e.target.value })}
-          placeholder="Например: Математика"
-        />
+        >
+          <option value="Математика">Математика</option>
+          {form.subject && form.subject !== 'Математика' && (
+            <option value={form.subject}>{form.subject}</option>
+          )}
+        </select>
 
         <label htmlFor="student_form_tutor_id">Привязанный педагог</label>
         <select
@@ -1049,6 +1116,15 @@ function StudentModal({
             </>
           ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
+              <label htmlFor="parent_full_name">ФИО родителя</label>
+              <input
+                id="parent_full_name"
+                name="parent_full_name"
+                value={parentFullName}
+                onChange={(e) => setParentFullName(e.target.value)}
+                placeholder="Имя и Фамилия родителя"
+              />
+
               <label htmlFor="parent_new_login">Логин для родителя *</label>
               <input
                 id="parent_new_login"
@@ -1074,6 +1150,23 @@ function StudentModal({
                 required
                 minLength={8}
               />
+
+              {newPassword && (
+                <div className="credentials-box" style={{ margin: '6px 0 2px 0', padding: '10px' }}>
+                  <p style={{ margin: '2px 0' }}>Логин: <strong>{newLogin || '(логин)'}</strong></p>
+                  <p style={{ margin: '2px 0' }}>Пароль: <strong>{newPassword}</strong></p>
+                  <button
+                    type="button"
+                    className="btn-sm btn-secondary"
+                    onClick={copyParentCredentials}
+                    style={{ marginTop: '6px' }}
+                  >
+                    {copiedParentCreds ? <Check size={14} color="var(--accent-strong)" /> : <Copy size={14} />}
+                    {copiedParentCreds ? 'Скопировано в буфер!' : 'Скопировать логин и пароль'}
+                  </button>
+                </div>
+              )}
+
               <button
                 type="button"
                 className="btn-sm"
@@ -1245,12 +1338,22 @@ function TutorModal({
   const [createAccount, setCreateAccount] = useState(false);
   const [newLogin, setNewLogin] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [copiedTutorCreds, setCopiedTutorCreds] = useState(false);
   const [error, setError] = useState('');
 
   // Password reset for existing tutor
   const [resetAccount, setResetAccount] = useState(false);
   const [changeLogin, setChangeLogin] = useState('');
   const [changePassword, setChangePassword] = useState('');
+
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   const currentTutorUser = useMemo(() => tutorUsersList.find((u) => u.id === form.user_id), [tutorUsersList, form.user_id]);
 
@@ -1264,6 +1367,12 @@ function TutorModal({
     const pass = generateRandomPassword();
     if (createAccount) setNewPassword(pass);
     if (resetAccount) setChangePassword(pass);
+  }
+
+  function copyTutorCredentials() {
+    navigator.clipboard.writeText(`Логин: ${newLogin}\nПароль: ${newPassword}\nФИО: ${form.name}`);
+    setCopiedTutorCreds(true);
+    setTimeout(() => setCopiedTutorCreds(false), 2500);
   }
 
   async function submit(e: FormEvent) {
@@ -1312,14 +1421,25 @@ function TutorModal({
   return (
     <div className="modal-backdrop">
       <form className="modal" onSubmit={submit}>
-        <h2>{initialData ? 'Редактировать педагога' : 'Добавить педагога'}</h2>
+        <div className="modal-header">
+          <h2>{initialData ? 'Редактировать педагога' : 'Добавить педагога'}</h2>
+          <button type="button" className="close-btn" title="Закрыть" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
 
         <label htmlFor="tutor_form_name">ФИО педагога *</label>
         <input
           id="tutor_form_name"
           name="name"
           value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          onChange={(e) => {
+            const val = e.target.value;
+            setForm({ ...form, name: val });
+            if (createAccount && !newLogin) {
+              setNewLogin(val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '') + '_tutor');
+            }
+          }}
           placeholder="Имя и Фамилия"
           required
         />
@@ -1477,6 +1597,23 @@ function TutorModal({
                 required
                 minLength={8}
               />
+
+              {newPassword && (
+                <div className="credentials-box" style={{ margin: '6px 0 2px 0', padding: '10px' }}>
+                  <p style={{ margin: '2px 0' }}>Логин: <strong>{newLogin || '(логин)'}</strong></p>
+                  <p style={{ margin: '2px 0' }}>Пароль: <strong>{newPassword}</strong></p>
+                  <button
+                    type="button"
+                    className="btn-sm btn-secondary"
+                    onClick={copyTutorCredentials}
+                    style={{ marginTop: '6px' }}
+                  >
+                    {copiedTutorCreds ? <Check size={14} color="var(--accent-strong)" /> : <Copy size={14} />}
+                    {copiedTutorCreds ? 'Скопировано в буфер!' : 'Скопировать логин и пароль'}
+                  </button>
+                </div>
+              )}
+
               <button
                 type="button"
                 className="btn-sm"
@@ -1730,6 +1867,15 @@ function UserAccountModal({
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   function fillGeneratedPassword() {
     setPassword(generateRandomPassword());
   }
@@ -1762,7 +1908,12 @@ function UserAccountModal({
   return (
     <div className="modal-backdrop">
       <form className="modal" onSubmit={submit}>
-        <h2>{initialData ? `Редактировать ${roleLabel(initialData.role)}` : `Выдать доступ (${roleLabel(role)})`}</h2>
+        <div className="modal-header">
+          <h2>{initialData ? `Редактировать ${roleLabel(initialData.role)}` : `Выдать доступ (${roleLabel(role)})`}</h2>
+          <button type="button" className="close-btn" title="Закрыть" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
 
         <label htmlFor="user_modal_login">Логин *</label>
         <input
